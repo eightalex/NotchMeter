@@ -1,9 +1,9 @@
 import Foundation
 import Security
 
-/// Доступ до запису Keychain, у якому Claude Code тримає свої облікові дані.
-/// Запис містить не лише OAuth підписки, а й токени MCP-серверів, тому при
-/// оновленні ми переписуємо словник цілком, змінюючи тільки потрібну гілку.
+/// Читання запису Keychain, у якому Claude Code тримає свої облікові дані.
+/// Писати в нього свідомо не вміємо: запис належить Claude Code, і чужа
+/// зміна ламає йому доступ (див. ClaudeCodeProvider).
 enum KeychainStore {
     static let service = "Claude Code-credentials"
 
@@ -43,16 +43,5 @@ enum KeychainStore {
               let dictionary = object as? [String: Any]
         else { throw KeychainError.malformed }
         return dictionary
-    }
-
-    static func writeCredentials(_ credentials: [String: Any]) throws {
-        let data = try JSONSerialization.data(withJSONObject: credentials, options: [])
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
-        guard status == errSecSuccess else { throw KeychainError.status(status) }
     }
 }

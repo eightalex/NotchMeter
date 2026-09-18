@@ -6,6 +6,8 @@
     <string>uk</string>
     <key>CFBundleExecutable</key>
     <string>NotchMeter</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.alexanderkuzmenko.notchmeter</string>
     <key>CFBundleInfoDictionaryVersion</key>
