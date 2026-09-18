@@ -1,18 +1,19 @@
 import Foundation
 
 /// Ліміти Claude Code віддає той самий OAuth-ендпоінт, який використовує
-/// команда `/usage`. Токен лежить у Keychain; якщо він протух, оновлюємо його
-/// і повертаємо оновлену пару назад у Keychain, щоб Claude Code продовжив
-/// працювати з тими самими даними.
+/// команда `/usage`. Токен лежить у Keychain, і ми його лише читаємо.
+///
+/// Оновлювати його самим не можна: refresh-токен при оновленні ротується,
+/// і запущені сесії Claude Code лишаються зі старим, а запис у чужий елемент
+/// Keychain ламає самому Claude Code доступ до нього — macOS починає питати
+/// пароль для `security` щоразу, коли CLI читає токен. Протухлий токен
+/// оновить сам Claude Code при наступному зверненні до API.
 actor ClaudeCodeProvider: LimitProvider {
     nonisolated let id = "claude"
     nonisolated let displayName = "Claude"
     nonisolated let refreshInterval: TimeInterval = 120
 
-    /// Публічний client_id Claude Code — узятий із самого CLI.
-    private static let clientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
-    private static let tokenURL = URL(string: "https://console.anthropic.com/v1/oauth/token")!
     private static let oauthBeta = "oauth-2025-04-20"
 
     /// Токен вважаємо простроченим трохи раніше за реальний строк, щоб не
@@ -20,7 +21,6 @@ actor ClaudeCodeProvider: LimitProvider {
     private static let expiryMargin: TimeInterval = 120
 
     private let session: URLSession
-    private var keychainWriteFailed = false
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -34,12 +34,8 @@ actor ClaudeCodeProvider: LimitProvider {
             }
 
             let plan = oauth["subscriptionType"] as? String
-            let token = try await validAccessToken(credentials: credentials, oauth: oauth)
-            var usage = try await requestUsage(token: token, plan: plan)
-            if keychainWriteFailed {
-                usage.error = "токен оновлено, але не збережено в Keychain"
-            }
-            return usage
+            let token = try validAccessToken(oauth: oauth)
+            return try await requestUsage(token: token, plan: plan)
         } catch let error as ProviderError {
             if case .throttled(let until) = error {
                 return .failed(id: id, displayName: displayName,
@@ -55,7 +51,7 @@ actor ClaudeCodeProvider: LimitProvider {
 
     // MARK: - Токен
 
-    private func validAccessToken(credentials: [String: Any], oauth: [String: Any]) async throws -> String {
+    private func validAccessToken(oauth: [String: Any]) throws -> String {
         guard let accessToken = oauth["accessToken"] as? String else {
             throw ProviderError.message("у Keychain немає access-токена")
         }
@@ -65,77 +61,13 @@ actor ClaudeCodeProvider: LimitProvider {
             return accessToken
         }
 
-        guard let refreshToken = oauth["refreshToken"] as? String else {
-            throw ProviderError.message("токен протух, а refresh-токена немає")
-        }
-
-        // Коли протух і refresh-токен, оновити його вже нічим — потрібен новий вхід.
-        // Запис у Keychain оновлює сам Claude Code, тому досить запустити CLI.
+        // Коли протух і refresh-токен, сам Claude Code теж не оновиться —
+        // потрібен новий вхід.
         let refreshExpiresAt = (oauth["refreshTokenExpiresAt"] as? Double).map { $0 / 1000 } ?? .greatestFiniteMagnitude
         guard Date().timeIntervalSince1970 < refreshExpiresAt else {
             throw ProviderError.message("потрібен вхід: claude auth login")
         }
-
-        return try await refresh(using: refreshToken, credentials: credentials, oauth: oauth)
-    }
-
-    private func refresh(using refreshToken: String,
-                         credentials: [String: Any],
-                         oauth: [String: Any]) async throws -> String {
-        var request = URLRequest(url: Self.tokenURL)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": Self.clientID,
-        ])
-
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-            // 400 тут майже завжди означає відхилений refresh-токен.
-            if code == 400 || code == 401 {
-                throw ProviderError.message("потрібен вхід: claude auth login")
-            }
-            throw ProviderError.message("не вдалося оновити токен (HTTP \(code))")
-        }
-        guard let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let newAccess = payload["access_token"] as? String
-        else {
-            throw ProviderError.message("несподівана відповідь на оновлення токена")
-        }
-
-        store(newAccess: newAccess, payload: payload, credentials: credentials, oauth: oauth)
-        return newAccess
-    }
-
-    /// Переписуємо лише гілку `claudeAiOauth`, решта запису (токени MCP-серверів
-    /// і десктопної авторизації) лишається недоторканою.
-    private func store(newAccess: String,
-                       payload: [String: Any],
-                       credentials: [String: Any],
-                       oauth: [String: Any]) {
-        var updatedOAuth = oauth
-        updatedOAuth["accessToken"] = newAccess
-        if let newRefresh = payload["refresh_token"] as? String {
-            updatedOAuth["refreshToken"] = newRefresh
-        }
-        if let expiresIn = payload["expires_in"] as? Double {
-            updatedOAuth["expiresAt"] = (Date().timeIntervalSince1970 + expiresIn) * 1000
-        }
-
-        var updated = credentials
-        updated["claudeAiOauth"] = updatedOAuth
-
-        do {
-            try KeychainStore.writeCredentials(updated)
-            keychainWriteFailed = false
-        } catch {
-            // Не критично: свіжий токен усе одно спрацює для цього циклу.
-            keychainWriteFailed = true
-        }
+        throw ProviderError.message("токен протух — оновиться, щойно запрацює Claude Code")
     }
 
     // MARK: - Ліміти
@@ -155,6 +87,9 @@ actor ClaudeCodeProvider: LimitProvider {
             // Сервер сам каже, скільки чекати; якщо ні — беремо п'ять хвилин.
             let seconds = (http.value(forHTTPHeaderField: "retry-after").flatMap(Double.init)) ?? 300
             throw ProviderError.throttled(until: Date().addingTimeInterval(seconds))
+        }
+        if http.statusCode == 401 {
+            throw ProviderError.message("токен відкликано — оновиться, щойно запрацює Claude Code")
         }
         guard http.statusCode == 200 else {
             throw ProviderError.message("API лімітів відповів HTTP \(http.statusCode)")
