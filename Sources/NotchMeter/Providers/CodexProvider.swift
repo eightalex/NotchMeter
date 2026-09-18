@@ -13,14 +13,34 @@ struct CodexProvider: LimitProvider {
     }
 
     func fetch() async -> ProviderUsage {
-        guard let url = CodexPaths.latestRollout(in: sessionsRoot, daysBack: 3) else {
+        let candidates = rolloutCandidates()
+        guard !candidates.isEmpty else {
             return .failed(tool: tool, message: "немає сесій Codex")
         }
-        guard let snapshot = Self.latestSnapshot(in: url) else {
-            return .failed(tool: tool, message: "немає даних про ліміти")
+        // У щойно створеному треді знімка лімітів ще може не бути — тоді
+        // беремо з попереднього.
+        for url in candidates {
+            if let snapshot = Self.latestSnapshot(in: url) {
+                return snapshot.usage(tool: tool)
+            }
         }
-        return snapshot.usage(tool: tool)
+        return .failed(tool: tool, message: "немає даних про ліміти")
     }
+
+    /// Логи від найсвіжішого. Основне джерело — база стану: сесію, продовжену
+    /// через кілька днів, Codex дописує в старий каталог, і обхід каталогів за
+    /// датою її не бачить. Обхід лишається запасним варіантом.
+    private func rolloutCandidates() -> [URL] {
+        let fromDatabase = CodexStateDatabase
+            .recentThreads(since: Date().addingTimeInterval(-Self.snapshotHorizon), limit: 5)
+            .map(\.rolloutURL)
+            .filter { FileManager.default.fileExists(atPath: $0.path) }
+        if !fromDatabase.isEmpty { return fromDatabase }
+        return CodexPaths.latestRollout(in: sessionsRoot, daysBack: 3).map { [$0] } ?? []
+    }
+
+    /// Знімок старший за тиждень уже нічого не каже про поточні вікна.
+    private static let snapshotHorizon: TimeInterval = 7 * 24 * 60 * 60
 
     /// Останній запис `token_count` у файлі — він несе актуальний `rate_limits`.
     static func latestSnapshot(in url: URL) -> TokenCountEvent? {
