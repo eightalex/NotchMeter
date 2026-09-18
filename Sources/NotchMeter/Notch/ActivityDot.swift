@@ -4,13 +4,13 @@ import SwiftUI
 /// Показує, чи виконується зараз задача цим інструментом, і скільки сесій
 /// працює одночасно. Коли все спокійно — нічого не малюємо.
 struct ActivityDot: View {
-    let tool: String
+    let tool: Tool
     let working: Int
     let needsInput: Int
 
     private var isVisible: Bool { working > 0 || needsInput > 0 }
 
-    private var color: NSColor { Style.accent(for: tool) }
+    private var color: NSColor { tool.accent }
 
     /// Пульсує лише «в роботі»: очікування вводу має читатись як стабільний стан.
     private var shouldPulse: Bool {

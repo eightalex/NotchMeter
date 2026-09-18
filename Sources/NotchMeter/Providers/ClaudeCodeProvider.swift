@@ -9,8 +9,7 @@ import Foundation
 /// пароль для `security` щоразу, коли CLI читає токен. Протухлий токен
 /// оновить сам Claude Code при наступному зверненні до API.
 actor ClaudeCodeProvider: LimitProvider {
-    nonisolated let id = "claude"
-    nonisolated let displayName = "Claude"
+    nonisolated let tool = Tool.claude
     nonisolated let refreshInterval: TimeInterval = 120
 
     private static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
@@ -30,7 +29,7 @@ actor ClaudeCodeProvider: LimitProvider {
         do {
             let credentials = try KeychainStore.readCredentials()
             guard let oauth = credentials["claudeAiOauth"] as? [String: Any] else {
-                return .failed(id: id, displayName: displayName, message: "Claude Code не авторизований")
+                return .failed(tool: tool, message: "Claude Code не авторизований")
             }
 
             let plan = oauth["subscriptionType"] as? String
@@ -38,14 +37,11 @@ actor ClaudeCodeProvider: LimitProvider {
             return try await requestUsage(token: token, plan: plan)
         } catch let error as ProviderError {
             if case .throttled(let until) = error {
-                return .failed(id: id, displayName: displayName,
-                               message: "забагато запитів, пауза", retryAfter: until)
+                return .failed(tool: tool, message: "забагато запитів, пауза", retryAfter: until)
             }
-            return .failed(id: id, displayName: displayName,
-                           message: error.errorDescription ?? "невідома помилка")
+            return .failed(tool: tool, message: error.errorDescription ?? "невідома помилка")
         } catch {
-            return .failed(id: id, displayName: displayName,
-                           message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+            return .failed(tool: tool, message: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
     }
 
@@ -100,8 +96,7 @@ actor ClaudeCodeProvider: LimitProvider {
 
         let windows = Self.parseWindows(payload)
         return ProviderUsage(
-            id: id,
-            displayName: displayName,
+            tool: tool,
             windows: windows,
             planName: plan,
             capturedAt: Date(),

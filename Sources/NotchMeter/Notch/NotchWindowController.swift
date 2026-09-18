@@ -266,10 +266,10 @@ final class NotchWindowController: NSObject {
         let sides = NSMenu()
         for left in DisplayPreferences.tools {
             let right = DisplayPreferences.tools.first { $0 != left } ?? left
-            let title = "\(Self.toolName(left)) ліворуч, \(Self.toolName(right)) праворуч"
+            let title = "\(left.displayName) ліворуч, \(right.displayName) праворуч"
             let item = NSMenuItem(title: title, action: #selector(changeLeftTool(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = left
+            item.representedObject = left.rawValue
             item.state = prefs.leftTool == left ? .on : .off
             sides.addItem(item)
         }
@@ -312,7 +312,8 @@ final class NotchWindowController: NSObject {
     }
 
     @objc private func changeLeftTool(_ sender: NSMenuItem) {
-        guard let tool = sender.representedObject as? String else { return }
+        guard let raw = sender.representedObject as? String,
+              let tool = Tool(rawValue: raw) else { return }
         DisplayPreferences.shared.leftTool = tool
     }
 
@@ -320,10 +321,6 @@ final class NotchWindowController: NSObject {
         guard let raw = sender.representedObject as? String,
               let choice = CompactWindowChoice(rawValue: raw) else { return }
         DisplayPreferences.shared.compactWindow = choice
-    }
-
-    private static func toolName(_ tool: String) -> String {
-        tool == "claude" ? "Claude" : "Codex"
     }
 
     @objc private func toggleLoginItem() {

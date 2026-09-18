@@ -42,7 +42,7 @@ struct ExpandedView: View {
     private var orderedUsage: [ProviderUsage] {
         let order = DisplayPreferences.shared.orderedTools
         return usage.usage.sorted {
-            (order.firstIndex(of: $0.id) ?? .max) < (order.firstIndex(of: $1.id) ?? .max)
+            (order.firstIndex(of: $0.tool) ?? .max) < (order.firstIndex(of: $1.tool) ?? .max)
         }
     }
 
@@ -61,7 +61,7 @@ private struct ProviderRow: View {
             HStack(spacing: 6) {
                 Text(entry.displayName)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(nsColor: Style.accent(for: entry.id)))
+                    .foregroundStyle(Color(nsColor: entry.tool.accent))
                 if let plan = entry.planName {
                     Text(plan)
                         .font(.system(size: 9, weight: .medium))
@@ -158,7 +158,7 @@ private struct SessionRow: View {
     let session: AgentSession
 
     private var color: Color {
-        Color(nsColor: Style.accent(for: session.tool))
+        Color(nsColor: session.tool.accent)
     }
 
     private var stateText: String {
@@ -178,7 +178,7 @@ private struct SessionRow: View {
                 )
                 .frame(width: 5, height: 5)
 
-            Text(Style.shortName(for: session.tool))
+            Text(session.tool.shortName)
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(color)
 

@@ -33,8 +33,8 @@ struct CompactView: View {
     /// Крила дзеркальні: мітка інструменту стоїть на зовнішньому краї, а
     /// індикатор активності — впритул до вирізу, куди й так дивиться око.
     @ViewBuilder
-    private func wing(for id: String, mirrored: Bool) -> some View {
-        let short = Style.shortName(for: id)
+    private func wing(for id: Tool, mirrored: Bool) -> some View {
+        let short = id.shortName
         let entry = usage.usage(for: id)
         let stale = entry?.isStale ?? true
         let dot = ActivityDot(
@@ -70,10 +70,10 @@ struct CompactView: View {
         }
     }
 
-    private func label(_ text: String, tool: String) -> some View {
+    private func label(_ text: String, tool: Tool) -> some View {
         Text(text)
             .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(Color(nsColor: Style.accent(for: tool)))
+            .foregroundStyle(Color(nsColor: tool.accent))
     }
 
     private func windowTag(_ text: String) -> some View {

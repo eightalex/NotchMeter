@@ -42,7 +42,7 @@ struct IdleView: View {
         }
     }
 
-    private func dot(for id: String) -> some View {
+    private func dot(for id: Tool) -> some View {
         ActivityDot(
             tool: id,
             working: activity.count(for: id, state: .working),

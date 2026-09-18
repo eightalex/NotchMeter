@@ -3,7 +3,7 @@ import SwiftUI
 enum Style {
     static let compactHeight: CGFloat = 32
     /// Вистачає на мітку, шкалу, «100%», мітку вікна й крапку з лічильником.
-    static let compactSideWidth: CGFloat = 128
+    static let compactSideWidth: CGFloat = 120
     /// Крила у спокої — під крапку активності з запасом, щоб її не підрізав
     /// край вирізу.
     /// Відступ від краю вирізу. Великий навмисно: система повідомляє межі
@@ -26,18 +26,6 @@ enum Style {
         case ..<85: return Color(nsColor: .systemYellow)
         default: return Color(nsColor: .systemRed)
         }
-    }
-
-    /// Фірмові акценти інструментів: Claude — помаранчевий, Codex — синій.
-    static let claudeAccent = NSColor(srgbRed: 0.851, green: 0.467, blue: 0.341, alpha: 1)
-    static let codexAccent = NSColor(srgbRed: 0.231, green: 0.510, blue: 0.965, alpha: 1)
-
-    static func accent(for tool: String) -> NSColor {
-        tool == "claude" ? claudeAccent : codexAccent
-    }
-
-    static func shortName(for tool: String) -> String {
-        tool == "claude" ? "CC" : "CX"
     }
 
     static let warningColor = Color(nsColor: .systemYellow)

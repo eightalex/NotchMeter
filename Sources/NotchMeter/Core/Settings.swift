@@ -58,29 +58,31 @@ enum CompactWindowChoice: String, CaseIterable {
 final class DisplayPreferences {
     static let shared = DisplayPreferences()
 
-    static let tools = ["codex", "claude"]
+    /// Обабіч вирізу рівно два крила, тож і агентів тут рівно двоє. Третьому
+    /// доведеться спершу знайти місце в розмітці.
+    static let tools: [Tool] = [.codex, .claude]
 
     /// Інструмент ліворуч від вирізу; другий автоматично стає праворуч.
-    var leftTool: String {
-        didSet { UserDefaults.standard.set(leftTool, forKey: Settings.Key.leftTool) }
+    var leftTool: Tool {
+        didSet { UserDefaults.standard.set(leftTool.rawValue, forKey: Settings.Key.leftTool) }
     }
 
     var compactWindow: CompactWindowChoice {
         didSet { UserDefaults.standard.set(compactWindow.rawValue, forKey: Settings.Key.compactWindow) }
     }
 
-    var rightTool: String {
-        Self.tools.first { $0 != leftTool } ?? "claude"
+    var rightTool: Tool {
+        Self.tools.first { $0 != leftTool } ?? .claude
     }
 
     /// Інструменти в порядку зліва направо — так само їх перелічує й
     /// розгорнута панель.
-    var orderedTools: [String] { [leftTool, rightTool] }
+    var orderedTools: [Tool] { [leftTool, rightTool] }
 
     private init() {
         let defaults = UserDefaults.standard
-        let stored = defaults.string(forKey: Settings.Key.leftTool)
-        leftTool = stored.flatMap { Self.tools.contains($0) ? $0 : nil } ?? "codex"
+        let stored = defaults.string(forKey: Settings.Key.leftTool).flatMap(Tool.init(rawValue:))
+        leftTool = stored.flatMap { Self.tools.contains($0) ? $0 : nil } ?? .codex
         compactWindow = defaults.string(forKey: Settings.Key.compactWindow)
             .flatMap(CompactWindowChoice.init(rawValue:)) ?? .automatic
     }

@@ -3,8 +3,7 @@ import Foundation
 /// Ліміти Codex читаються з локальних логів сесій — CLI записує туди знімок
 /// `rate_limits`, який приходить у кожній відповіді API. Мережа не потрібна.
 struct CodexProvider: LimitProvider {
-    let id = "codex"
-    let displayName = "Codex"
+    let tool = Tool.codex
     let refreshInterval: TimeInterval = 20
 
     private let sessionsRoot: URL
@@ -15,12 +14,12 @@ struct CodexProvider: LimitProvider {
 
     func fetch() async -> ProviderUsage {
         guard let url = CodexPaths.latestRollout(in: sessionsRoot, daysBack: 3) else {
-            return .failed(id: id, displayName: displayName, message: "немає сесій Codex")
+            return .failed(tool: tool, message: "немає сесій Codex")
         }
         guard let snapshot = Self.latestSnapshot(in: url) else {
-            return .failed(id: id, displayName: displayName, message: "немає даних про ліміти")
+            return .failed(tool: tool, message: "немає даних про ліміти")
         }
-        return snapshot.usage(id: id, displayName: displayName)
+        return snapshot.usage(tool: tool)
     }
 
     /// Останній запис `token_count` у файлі — він несе актуальний `rate_limits`.
@@ -97,7 +96,7 @@ struct TokenCountEvent: Decodable {
         }
     }
 
-    func usage(id: String, displayName: String) -> ProviderUsage {
+    func usage(tool: Tool) -> ProviderUsage {
         var windows: [LimitWindow] = []
         if let primary = payload.rateLimits?.primary {
             windows.append(primary.limitWindow(fallbackLabel: "Сесія"))
@@ -106,8 +105,7 @@ struct TokenCountEvent: Decodable {
             windows.append(secondary.limitWindow(fallbackLabel: "Тиждень"))
         }
         return ProviderUsage(
-            id: id,
-            displayName: displayName,
+            tool: tool,
             windows: windows,
             planName: payload.rateLimits?.planType,
             capturedAt: timestamp ?? Date(),

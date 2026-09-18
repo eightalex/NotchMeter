@@ -10,9 +10,9 @@ final class UsageStore {
 
     @ObservationIgnored private let providers: [any LimitProvider]
     @ObservationIgnored private var timers: [Timer] = []
-    @ObservationIgnored private var inFlight: Set<String> = []
-    @ObservationIgnored private var lastAttempt: [String: Date] = [:]
-    @ObservationIgnored private var pausedUntil: [String: Date] = [:]
+    @ObservationIgnored private var inFlight: Set<Tool> = []
+    @ObservationIgnored private var lastAttempt: [Tool: Date] = [:]
+    @ObservationIgnored private var pausedUntil: [Tool: Date] = [:]
 
     /// Панель просить оновлення щоразу, коли з'являється на очі, — без цієї
     /// паузи кілька наведень поспіль вичерпують ліміт запитів до API.
@@ -54,20 +54,20 @@ final class UsageStore {
     }
 
     private func refresh(_ provider: any LimitProvider, force: Bool = false) {
-        guard !inFlight.contains(provider.id) else { return }
+        guard !inFlight.contains(provider.tool) else { return }
 
-        if let until = pausedUntil[provider.id], Date() < until, !force { return }
-        if !force, let last = lastAttempt[provider.id],
+        if let until = pausedUntil[provider.tool], Date() < until, !force { return }
+        if !force, let last = lastAttempt[provider.tool],
            Date().timeIntervalSince(last) < Self.onDemandGap { return }
 
-        lastAttempt[provider.id] = Date()
-        inFlight.insert(provider.id)
+        lastAttempt[provider.tool] = Date()
+        inFlight.insert(provider.tool)
 
         Task { [weak self] in
             let result = await provider.fetch()
             await MainActor.run {
                 guard let self else { return }
-                self.inFlight.remove(provider.id)
+                self.inFlight.remove(provider.tool)
                 self.apply(result)
             }
         }
@@ -98,14 +98,14 @@ final class UsageStore {
         }
         // Порядок у панелі має збігатися з порядком крил біля вирізу.
         // Сортуємо щоразу: кеш із попередніх версій міг зберегтися в іншому порядку.
-        let order = providers.map(\.id)
+        let order = providers.map(\.tool)
         usage.sort { (order.firstIndex(of: $0.id) ?? .max) < (order.firstIndex(of: $1.id) ?? .max) }
 
         lastUpdated = Date()
         Settings.saveCachedUsage(usage)
     }
 
-    func usage(for id: String) -> ProviderUsage? {
-        usage.first { $0.id == id }
+    func usage(for tool: Tool) -> ProviderUsage? {
+        usage.first { $0.tool == tool }
     }
 }

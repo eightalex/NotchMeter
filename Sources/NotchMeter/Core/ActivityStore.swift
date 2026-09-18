@@ -80,11 +80,11 @@ final class ActivityStore {
 
     // MARK: - Зведення для UI
 
-    func sessions(for tool: String) -> [AgentSession] {
+    func sessions(for tool: Tool) -> [AgentSession] {
         sessions.filter { $0.tool == tool }
     }
 
-    func count(for tool: String, state: AgentState) -> Int {
+    func count(for tool: Tool, state: AgentState) -> Int {
         sessions.reduce(0) { $0 + (($1.tool == tool && $1.state == state) ? 1 : 0) }
     }
 

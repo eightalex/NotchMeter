@@ -32,7 +32,7 @@ enum Diagnostics {
         for session in sessions {
             let elapsed = session.elapsedDescription.map { " \($0)" } ?? ""
             let steps = session.steps.map { " \($0) кр." } ?? ""
-            print("  [\(session.tool)] \(session.state.rawValue)\(elapsed)\(steps) — \(session.title) · \(session.directory)")
+            print("  [\(session.tool.rawValue)] \(session.state.rawValue)\(elapsed)\(steps) — \(session.title) · \(session.directory)")
         }
     }
 

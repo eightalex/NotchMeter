@@ -4,7 +4,7 @@ import Foundation
 /// і сам же підтримує в них поле `status`. Це найточніше джерело — не треба
 /// вгадувати активність за файловою активністю.
 struct ClaudeSessionScanner: SessionScanner {
-    let tool = "claude"
+    let tool = Tool.claude
 
     private let directory: URL
 

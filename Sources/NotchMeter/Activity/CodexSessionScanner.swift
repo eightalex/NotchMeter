@@ -5,7 +5,7 @@ import SQLite3
 /// подій `task_started` / `task_complete`. Якщо остання з них — `task_started`,
 /// агент зараз працює. Перелік самих тредів беремо з бази стану.
 struct CodexSessionScanner: SessionScanner {
-    let tool = "codex"
+    let tool = Tool.codex
 
     /// Треди, яких не чіпали більше доби, до активних точно не належать.
     private static let threadHorizon: TimeInterval = 24 * 60 * 60

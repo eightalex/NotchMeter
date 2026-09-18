@@ -57,14 +57,23 @@ struct LimitWindow: Codable, Hashable, Identifiable {
 
 /// Стан квот одного інструменту.
 struct ProviderUsage: Codable, Hashable, Identifiable {
-    let id: String
-    let displayName: String
+    let tool: Tool
     var windows: [LimitWindow]
     var planName: String?
     var capturedAt: Date
     var error: String?
     /// Коли сервер попросив зачекати (HTTP 429) — доки не звертатись.
     var retryAfter: Date?
+
+    var id: Tool { tool }
+    var displayName: String { tool.displayName }
+
+    /// Кеш писали ще тоді, коли агент звався рядком у полі `id`; сире значення
+    /// `Tool` — той самий рядок, тож старий кеш читається без міграції.
+    private enum CodingKeys: String, CodingKey {
+        case tool = "id"
+        case windows, planName, capturedAt, error, retryAfter
+    }
 
     /// Найбільш заповнене вікно — до нього зараз найближче.
     var primaryWindow: LimitWindow? {
@@ -92,16 +101,14 @@ struct ProviderUsage: Codable, Hashable, Identifiable {
         Date().timeIntervalSince(capturedAt) > 30 * 60
     }
 
-    static func failed(id: String, displayName: String, message: String,
-                       retryAfter: Date? = nil) -> ProviderUsage {
-        ProviderUsage(id: id, displayName: displayName, windows: [],
+    static func failed(tool: Tool, message: String, retryAfter: Date? = nil) -> ProviderUsage {
+        ProviderUsage(tool: tool, windows: [],
                       planName: nil, capturedAt: Date(), error: message, retryAfter: retryAfter)
     }
 }
 
 protocol LimitProvider: Sendable {
-    var id: String { get }
-    var displayName: String { get }
+    var tool: Tool { get }
     /// Мінімальний інтервал між опитуваннями, секунди.
     var refreshInterval: TimeInterval { get }
     func fetch() async -> ProviderUsage

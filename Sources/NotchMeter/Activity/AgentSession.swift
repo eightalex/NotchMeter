@@ -11,7 +11,7 @@ enum AgentState: String, Codable {
 
 struct AgentSession: Identifiable, Hashable {
     let id: String
-    let tool: String
+    let tool: Tool
     let title: String
     let directory: String
     let state: AgentState
@@ -30,6 +30,6 @@ struct AgentSession: Identifiable, Hashable {
 }
 
 protocol SessionScanner: Sendable {
-    var tool: String { get }
+    var tool: Tool { get }
     func scan() -> [AgentSession]
 }
