@@ -261,6 +261,34 @@ final class NotchWindowController: NSObject {
         intervalItem.submenu = intervals
         menu.addItem(intervalItem)
 
+        let prefs = DisplayPreferences.shared
+
+        let sides = NSMenu()
+        for left in DisplayPreferences.tools {
+            let right = DisplayPreferences.tools.first { $0 != left } ?? left
+            let title = "\(Self.toolName(left)) ліворуч, \(Self.toolName(right)) праворуч"
+            let item = NSMenuItem(title: title, action: #selector(changeLeftTool(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = left
+            item.state = prefs.leftTool == left ? .on : .off
+            sides.addItem(item)
+        }
+        let sidesItem = NSMenuItem(title: "Розташування", action: nil, keyEquivalent: "")
+        sidesItem.submenu = sides
+        menu.addItem(sidesItem)
+
+        let windows = NSMenu()
+        for choice in CompactWindowChoice.allCases {
+            let item = NSMenuItem(title: choice.menuTitle, action: #selector(changeCompactWindow(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = choice.rawValue
+            item.state = prefs.compactWindow == choice ? .on : .off
+            windows.addItem(item)
+        }
+        let windowsItem = NSMenuItem(title: "Ліміт в індикаторі", action: nil, keyEquivalent: "")
+        windowsItem.submenu = windows
+        menu.addItem(windowsItem)
+
         let loginItem = NSMenuItem(title: "Запускати при вході", action: #selector(toggleLoginItem), keyEquivalent: "")
         loginItem.target = self
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -281,6 +309,21 @@ final class NotchWindowController: NSObject {
         guard let multiplier = sender.representedObject as? Double else { return }
         Settings.refreshMultiplier = multiplier
         usage.start()
+    }
+
+    @objc private func changeLeftTool(_ sender: NSMenuItem) {
+        guard let tool = sender.representedObject as? String else { return }
+        DisplayPreferences.shared.leftTool = tool
+    }
+
+    @objc private func changeCompactWindow(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let choice = CompactWindowChoice(rawValue: raw) else { return }
+        DisplayPreferences.shared.compactWindow = choice
+    }
+
+    private static func toolName(_ tool: String) -> String {
+        tool == "claude" ? "Claude" : "Codex"
     }
 
     @objc private func toggleLoginItem() {

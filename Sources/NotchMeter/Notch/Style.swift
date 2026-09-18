@@ -2,7 +2,8 @@ import SwiftUI
 
 enum Style {
     static let compactHeight: CGFloat = 32
-    static let compactSideWidth: CGFloat = 104
+    /// Вистачає на мітку, шкалу, «100%», мітку вікна й крапку з лічильником.
+    static let compactSideWidth: CGFloat = 128
     /// Крила у спокої — під крапку активності з запасом, щоб її не підрізав
     /// край вирізу.
     /// Відступ від краю вирізу. Великий навмисно: система повідомляє межі
@@ -33,6 +34,10 @@ enum Style {
 
     static func accent(for tool: String) -> NSColor {
         tool == "claude" ? claudeAccent : codexAccent
+    }
+
+    static func shortName(for tool: String) -> String {
+        tool == "claude" ? "CC" : "CX"
     }
 
     static let warningColor = Color(nsColor: .systemYellow)

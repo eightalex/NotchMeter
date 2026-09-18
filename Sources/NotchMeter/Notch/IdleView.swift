@@ -11,13 +11,13 @@ struct IdleView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            dot(for: "codex")
+            dot(for: DisplayPreferences.shared.leftTool)
                 .padding(.trailing, Style.idleDotInset)
                 .frame(width: sideWidth, alignment: .trailing)
 
             Color.clear.frame(width: geometry.notchWidth)
 
-            dot(for: "claude")
+            dot(for: DisplayPreferences.shared.rightTool)
                 .padding(.leading, Style.idleDotInset)
                 .frame(width: sideWidth, alignment: .leading)
         }
@@ -34,7 +34,7 @@ struct IdleView: View {
 
     /// Обидва крила однакові, тож ширину визначає найширше з них.
     static func hasBadge(in activity: ActivityStore) -> Bool {
-        ["codex", "claude"].contains { tool in
+        DisplayPreferences.tools.contains { tool in
             ActivityDot.badge(
                 working: activity.count(for: tool, state: .working),
                 needsInput: activity.count(for: tool, state: .needsInput)

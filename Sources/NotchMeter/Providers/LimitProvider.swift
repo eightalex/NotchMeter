@@ -27,6 +27,21 @@ struct LimitWindow: Codable, Hashable, Identifiable {
         return "\(total) с"
     }
 
+    /// Коротка мітка для компактного вигляду: «5г», «7д». Виводимо з назви,
+    /// а не зберігаємо окремо, — так кеш старого формату лишається сумісним.
+    var shortLabel: String {
+        if label == "Тиждень" || label.hasSuffix("/ тиж") { return "7д" }
+        let parts = label.split(separator: " ")
+        guard parts.count == 2, let value = Int(parts[0]) else { return label }
+        switch parts[1] {
+        case "тиж": return "\(value * 7)д"
+        case "д": return "\(value)д"
+        case "год": return "\(value)г"
+        case "хв": return "\(value)хв"
+        default: return label
+        }
+    }
+
     /// Назва вікна за його тривалістю у хвилинах (формат Codex).
     static func label(forWindowMinutes minutes: Int) -> String {
         switch minutes {
@@ -51,9 +66,26 @@ struct ProviderUsage: Codable, Hashable, Identifiable {
     /// Коли сервер попросив зачекати (HTTP 429) — доки не звертатись.
     var retryAfter: Date?
 
-    /// Вікно, яке показуємо у компактному вигляді — найбільш заповнене.
+    /// Найбільш заповнене вікно — до нього зараз найближче.
     var primaryWindow: LimitWindow? {
         windows.max { $0.usedPercent < $1.usedPercent }
+    }
+
+    /// Вікно для компактного вигляду. Якщо обраного вікна в інструмента немає
+    /// (скажімо, план без 5-годинного ліміту), беремо найзаповненіше — мітка
+    /// поруч однаково скаже, що саме показано.
+    func window(for choice: CompactWindowChoice) -> LimitWindow? {
+        switch choice {
+        case .automatic:
+            return primaryWindow
+        case .fiveHours:
+            return windows.first { $0.shortLabel == "5г" } ?? primaryWindow
+        case .week:
+            // Загальний тижневий ліміт важливіший за окремий для Opus.
+            return windows.first { $0.label == "Тиждень" }
+                ?? windows.first { $0.shortLabel == "7д" }
+                ?? primaryWindow
+        }
     }
 
     var isStale: Bool {

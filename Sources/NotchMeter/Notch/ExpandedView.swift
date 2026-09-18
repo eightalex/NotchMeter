@@ -13,7 +13,7 @@ struct ExpandedView: View {
             Color.clear.frame(height: geometry.barHeight)
 
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(usage.usage) { entry in
+                ForEach(orderedUsage) { entry in
                     ProviderRow(entry: entry)
                 }
 
@@ -36,6 +36,14 @@ struct ExpandedView: View {
                 .fill(Color.black)
         )
 
+    }
+
+    /// Той самий порядок, що й обабіч вирізу: лівий інструмент — першим.
+    private var orderedUsage: [ProviderUsage] {
+        let order = DisplayPreferences.shared.orderedTools
+        return usage.usage.sorted {
+            (order.firstIndex(of: $0.id) ?? .max) < (order.firstIndex(of: $1.id) ?? .max)
+        }
     }
 
     static let clock: DateFormatter = {
@@ -170,7 +178,7 @@ private struct SessionRow: View {
                 )
                 .frame(width: 5, height: 5)
 
-            Text(session.tool == "codex" ? "CX" : "CC")
+            Text(Style.shortName(for: session.tool))
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(color)
 
