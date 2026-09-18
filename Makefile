@@ -3,13 +3,18 @@
 SWIFT_FLAGS = --build-system native
 APP = build/NotchMeter.app
 
-.PHONY: build app run dump install clean stop
+.PHONY: build app run dump install clean stop icon
 
 build:
 	swift build $(SWIFT_FLAGS)
 
 app:
 	./Scripts/bundle.sh
+
+# Іконка лежить у репозиторії готовою; ціль потрібна лише після правок у
+# Scripts/make-icon.swift.
+icon:
+	./Scripts/make-icon.swift .
 
 run: app stop
 	open $(APP)

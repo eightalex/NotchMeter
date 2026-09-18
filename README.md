@@ -22,7 +22,10 @@
 make run       # зібрати build/NotchMeter.app і запустити
 make install   # скопіювати в /Applications
 make dump      # вивести ліміти й сесії в термінал без UI
+make icon      # перемалювати Resources/AppIcon.icns
 ```
+
+Іконка лежить у репозиторії готовою — `make icon` потрібен лише після правок у `Scripts/make-icon.swift`, який малює її на CoreGraphics і збирає `.icns` через `iconutil`.
 
 ## Звідки беруться дані
 
