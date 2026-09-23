@@ -29,11 +29,10 @@ struct ActivityDot: View {
 
     var body: some View {
         if isVisible {
-            HStack(spacing: 2) {
+            HStack(spacing: 0) {
                 // «Чекає на тебе» важливіше за «зайнятий»: кільце лишається,
                 // доки хоч одна сесія чекає відповіді.
-                PulsingDot(color: color, pulsing: shouldPulse, ringed: needsInput > 0, diameter: 6)
-                    .frame(width: 6, height: 6)
+                PulsingDot(color: color, pulsing: shouldPulse, ringed: needsInput > 0)
 
                 if let badge {
                     Text(badge)
@@ -41,20 +40,27 @@ struct ActivityDot: View {
                         .foregroundStyle(Color(nsColor: color))
                 }
             }
+            .fixedSize()
         }
     }
 }
 
-/// Пульсація живе на рівні Core Animation: вона не залежить від оновлень
-/// даних і не змушує SwiftUI перемальовувати панель кожен кадр.
+/// Пульсація живе на рівні Core Animation: сервер рендерингу крутить її сам,
+/// і застосунок не перемальовує панель на кожному кадрі (аналог на SwiftUI
+/// коштував близько 8 % CPU проти десятих часток відсотка тут).
 struct PulsingDot: NSViewRepresentable {
+    static let diameter: CGFloat = 6
+    /// Прозорий запас довкола кола: коли AppKit вирівнює шар по пікселях,
+    /// коло впритул до меж шару втрачало крайній піксель — звідси «обрізання».
+    static let padding: CGFloat = 1
+    static var side: CGFloat { diameter + padding * 2 }
+
     let color: NSColor
     let pulsing: Bool
     var ringed = false
-    let diameter: CGFloat
 
     func makeNSView(context: Context) -> DotView {
-        let view = DotView(diameter: diameter)
+        let view = DotView()
         view.apply(color: color, pulsing: pulsing, ringed: ringed)
         return view
     }
@@ -63,28 +69,52 @@ struct PulsingDot: NSViewRepresentable {
         nsView.apply(color: color, pulsing: pulsing, ringed: ringed)
     }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: DotView, context: Context) -> CGSize? {
+        CGSize(width: Self.side, height: Self.side)
+    }
+
     final class DotView: NSView {
         private let dot = CALayer()
         private var currentColor: NSColor?
         private var isPulsing = false
 
-        init(diameter: CGFloat) {
-            super.init(frame: CGRect(x: 0, y: 0, width: diameter, height: diameter))
+        init() {
+            super.init(frame: CGRect(x: 0, y: 0, width: PulsingDot.side, height: PulsingDot.side))
             wantsLayer = true
-            dot.cornerRadius = diameter / 2
+            layer?.masksToBounds = false
+            dot.cornerRadius = PulsingDot.diameter / 2
+            dot.borderColor = NSColor.white.cgColor
             layer?.addSublayer(dot)
         }
 
         @available(*, unavailable)
         required init?(coder: NSCoder) { fatalError("init(coder:) не підтримується") }
 
+        override var intrinsicContentSize: NSSize {
+            NSSize(width: PulsingDot.side, height: PulsingDot.side)
+        }
+
         override func layout() {
             super.layout()
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            dot.frame = bounds
-            dot.cornerRadius = min(bounds.width, bounds.height) / 2
+            // Коло завжди по центру власного розміру, а не на весь шар.
+            let d = PulsingDot.diameter
+            dot.frame = CGRect(x: (bounds.width - d) / 2, y: (bounds.height - d) / 2, width: d, height: d)
             CATransaction.commit()
+        }
+
+        override func viewDidChangeBackingProperties() {
+            super.viewDidChangeBackingProperties()
+            dot.contentsScale = window?.backingScaleFactor ?? 2
+        }
+
+        /// Шар губить анімації, коли view виймають із вікна, — повертаємо.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil, isPulsing, dot.animation(forKey: "pulse") == nil {
+                addPulse()
+            }
         }
 
         func apply(color: NSColor, pulsing: Bool, ringed: Bool) {
@@ -92,24 +122,27 @@ struct PulsingDot: NSViewRepresentable {
                 currentColor = color
                 dot.backgroundColor = color.cgColor
             }
-            dot.borderColor = NSColor.white.cgColor
             dot.borderWidth = ringed ? 1.5 : 0
             guard isPulsing != pulsing else { return }
             isPulsing = pulsing
 
             if pulsing {
-                let animation = CABasicAnimation(keyPath: "opacity")
-                animation.fromValue = 1.0
-                animation.toValue = 0.3
-                animation.duration = 0.9
-                animation.autoreverses = true
-                animation.repeatCount = .infinity
-                animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                dot.add(animation, forKey: "pulse")
+                addPulse()
             } else {
                 dot.removeAnimation(forKey: "pulse")
                 dot.opacity = 1
             }
+        }
+
+        private func addPulse() {
+            let animation = CABasicAnimation(keyPath: "opacity")
+            animation.fromValue = 1.0
+            animation.toValue = 0.3
+            animation.duration = 0.9
+            animation.autoreverses = true
+            animation.repeatCount = .infinity
+            animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            dot.add(animation, forKey: "pulse")
         }
     }
 }

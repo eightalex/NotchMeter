@@ -14,12 +14,21 @@ final class NotchWindowController: NSObject {
     private var geometry: NotchGeometry?
 
     private var state: NotchState = .hidden
+    /// Розміри фігури, до яких вона зараз прямує (або вже досягла).
+    private var metrics: NotchMetrics?
+    private var expandedHeight: CGFloat = 200
+
     private var collapseWorkItem: DispatchWorkItem?
+    private var settleWorkItem: DispatchWorkItem?
     private var cursorTimer: Timer?
+    private var mouseMonitors: [Any] = []
+    private var ticks = 0
 
     /// Невеликий запас навколо панелі, щоб курсор не «зривався» на межі.
     private let hoverPadding: CGFloat = 6
     private let expandedHoverPadding: CGFloat = 10
+    /// Скільки чекати, доки пружина вгамується, перш ніж підрізати вікно.
+    private let settleDelay: TimeInterval = 0.75
 
     init(usage: UsageStore, activity: ActivityStore) {
         self.usage = usage
@@ -43,10 +52,31 @@ final class NotchWindowController: NSObject {
             object: nil
         )
 
-        cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.trackCursor() }
+        installMouseMonitors()
+
+        // Рух миші ловлять монітори подій; таймер лише підстраховує і
+        // стежить за тим, що від миші не залежить (крапки, повний екран).
+        cursorTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.heartbeat() }
         }
-        cursorTimer?.tolerance = 0.03
+        cursorTimer?.tolerance = 0.05
+    }
+
+    /// Реакція на наведення без затримки опитування — саме від неї залежить,
+    /// чи відчувається анімація «живою».
+    private func installMouseMonitors() {
+        let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+            Task { @MainActor in self?.trackCursor() }
+        }) {
+            mouseMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+            Task { @MainActor in self?.trackCursor() }
+            return event
+        }) {
+            mouseMonitors.append(local)
+        }
     }
 
     // MARK: - Побудова вікна
@@ -55,10 +85,12 @@ final class NotchWindowController: NSObject {
         guard let geometry = NotchGeometry.current() else { return }
         self.geometry = geometry
 
-        let frame = geometry.windowFrame(sideWidth: Style.compactSideWidth, height: Style.compactHeight)
+        let target = targetMetrics(geometry: geometry)
+        let frame = target.windowFrame(in: geometry)
 
         let panel = self.panel ?? NotchPanel(contentRect: frame)
-        let root = makeRootView(geometry: geometry)
+        panel.acceptsMouseMovedEvents = true
+        let root = makeRootView(geometry: geometry, metrics: target, animation: nil)
 
         if let hostingView {
             hostingView.rootView = root
@@ -81,81 +113,98 @@ final class NotchWindowController: NSObject {
             self.container = container
         }
 
+        settleWorkItem?.cancel()
         panel.setFrame(frame, display: true)
+        panel.ignoresMouseEvents = state == .hidden
         panel.orderFrontRegardless()
         self.panel = panel
-        applyState(animated: false)
+        metrics = target
     }
 
-    private func makeRootView(geometry: NotchGeometry) -> NotchRootView {
-        NotchRootView(geometry: geometry, usage: usage, activity: activity, state: state)
+    private func makeRootView(geometry: NotchGeometry, metrics: NotchMetrics, animation: Animation?) -> NotchRootView {
+        NotchRootView(
+            geometry: geometry,
+            usage: usage,
+            activity: activity,
+            state: state,
+            metrics: metrics,
+            animation: animation
+        )
     }
 
-    // MARK: - Розгортання
+    private func targetMetrics(geometry: NotchGeometry) -> NotchMetrics {
+        NotchMetrics.make(
+            for: state,
+            geometry: geometry,
+            idleSideWidth: idleSideWidth,
+            expandedHeight: expandedHeight
+        )
+    }
+
+    // MARK: - Перехід між станами
 
     private func setState(_ newState: NotchState) {
-        guard !isSameState(state, newState) else { return }
+        guard state != newState else { return }
+        let old = state
         state = newState
         // Дані оновлюємо, щойно панель з'являється на очі.
-        if case .hidden = newState {} else { usage.refreshAll() }
-        applyState(animated: true)
+        if newState != .hidden { usage.refreshAll() }
+        if newState == .expanded { remeasureExpandedHeight() }
+        applyState(animation: NotchState.animation(from: old, to: newState))
     }
 
-    private func isSameState(_ lhs: NotchState, _ rhs: NotchState) -> Bool {
-        switch (lhs, rhs) {
-        case (.hidden, .hidden), (.compact, .compact), (.expanded, .expanded): return true
-        default: return false
-        }
-    }
-
-    private func applyState(animated: Bool) {
+    /// Вікно не анімується: спершу воно одразу стає достатньо великим для
+    /// всього руху, потім фігура всередині плавно змінює розмір, а коли
+    /// пружина вгамується — вікно підрізається до кінцевого розміру.
+    /// Вміст прив'язаний до верху по центру, тож зміна вікна на око непомітна.
+    private func applyState(animation: Animation?) {
         guard let panel, let geometry, let hostingView else { return }
 
-        hostingView.rootView = makeRootView(geometry: geometry)
+        let target = targetMetrics(geometry: geometry)
+        let targetFrame = target.windowFrame(in: geometry)
+
+        settleWorkItem?.cancel()
+        settleWorkItem = nil
+
+        if animation != nil {
+            // Поточна рамка вже вміщує фігуру в польоті; запас під пружину
+            // додаємо лише до цілі, інакше при частих переходах вікно росло б.
+            var slackTarget = targetFrame.insetBy(dx: -Style.springSlack, dy: 0)
+            slackTarget.origin.y -= Style.springSlack
+            slackTarget.size.height += Style.springSlack
+            panel.setFrame(panel.frame.union(slackTarget), display: false)
+        }
+
         // У спокої вікно прозоре для миші, щоб не перекривати рядок меню;
         // щойно з'явились індикатори — приймаємо клік, який розгортає панель.
-        panel.ignoresMouseEvents = isHidden
-        panel.hasShadow = isExpandedState
+        panel.ignoresMouseEvents = state == .hidden
+        hostingView.rootView = makeRootView(geometry: geometry, metrics: target, animation: animation)
+        metrics = target
 
-        let frame: CGRect
-        switch state {
-        case .hidden:
-            // У спокої вікно завширшки рівно з вирізом, а коли хтось працює —
-            // трохи ширше, рівно під крапки активності.
-            frame = geometry.windowFrame(sideWidth: idleSideWidth, height: geometry.barHeight)
-        case .compact:
-            frame = geometry.windowFrame(sideWidth: Style.compactSideWidth, height: Style.compactHeight)
-        case .expanded:
-            let width = geometry.notchWidth + Style.expandedSideWidth * 2
-            let height = measuredHeight(width: width, geometry: geometry)
-            frame = CGRect(
-                x: geometry.notchRect.midX - width / 2,
-                y: geometry.notchRect.maxY - height,
-                width: width,
-                height: height
-            )
+        guard animation != nil else {
+            panel.setFrame(targetFrame, display: true)
+            return
         }
 
-        if animated && !Style.reduceMotion {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.2
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                panel.animator().setFrame(frame, display: true)
+        let item = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self, let panel = self.panel else { return }
+                self.settleWorkItem = nil
+                panel.setFrame(targetFrame, display: true)
             }
-        } else {
-            panel.setFrame(frame, display: true)
         }
+        settleWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay, execute: item)
     }
 
-    /// Висота панелі залежить від того, скільки зараз сесій і вікон лімітів.
-    /// Міряємо на окремому view: у того, що вже на екрані, SwiftUI віддає
-    /// розмір попереднього стану, і панель виходить обрізаною.
-    private func measuredHeight(width: CGFloat, geometry: NotchGeometry) -> CGFloat {
-        let probe = NSHostingView(rootView: makeRootView(geometry: geometry))
-        probe.setFrameSize(NSSize(width: width, height: 0))
-        probe.layoutSubtreeIfNeeded()
-        let fitting = probe.fittingSize.height
-        return min(max(fitting.rounded(.up), 150), 520)
+    private func remeasureExpandedHeight() {
+        guard let geometry else { return }
+        expandedHeight = ExpandedView.measuredHeight(
+            width: geometry.notchWidth + Style.expandedSideWidth * 2,
+            geometry: geometry,
+            usage: usage,
+            activity: activity
+        )
     }
 
     // MARK: - Курсор
@@ -163,21 +212,34 @@ final class NotchWindowController: NSObject {
     /// Крила у спокої потрібні, лише поки є про що сигналити.
     private var idleSideWidth: CGFloat {
         guard activity.totalWorking + activity.totalNeedsInput > 0 else { return 0 }
-        return Style.idleSideWidth(hasBadge: IdleView.hasBadge(in: activity))
+        return Style.idleSideWidth(badgeLength: IdleView.badgeLength(in: activity))
     }
 
-    private var isHidden: Bool {
-        if case .hidden = state { return true }
-        return false
-    }
+    private var isExpandedState: Bool { state == .expanded }
 
-    private var isExpandedState: Bool {
-        if case .expanded = state { return true }
-        return false
+    /// Те, від чого не залежить рух миші: чи не з'явилась крапка активності,
+    /// чи не змінилась кількість сесій у розгорнутій панелі.
+    private func heartbeat() {
+        ticks += 1
+        trackCursor()
+        guard let geometry else { return }
+
+        if state == .hidden, targetMetrics(geometry: geometry) != metrics {
+            applyState(animation: NotchState.adjustmentAnimation)
+        }
+
+        // Раз на секунду звіряємо висоту панелі з тим, що в ній зараз є.
+        if state == .expanded, ticks % 4 == 0 {
+            let previous = expandedHeight
+            remeasureExpandedHeight()
+            if abs(previous - expandedHeight) > 1 {
+                applyState(animation: NotchState.adjustmentAnimation)
+            }
+        }
     }
 
     private func trackCursor() {
-        guard let panel, let geometry else { return }
+        guard let panel, let geometry, let metrics else { return }
 
         // У повноекранному режимі рядка меню немає — панель там зайва.
         let screen = geometry.screen
@@ -189,25 +251,24 @@ final class NotchWindowController: NSObject {
             panel.orderFrontRegardless()
         }
 
+        // Зона наведення — те, що видно, а не все вікно разом із запасом під тінь.
         let location = NSEvent.mouseLocation
+        let visible = metrics.visibleRect(in: geometry)
         let padding = isExpandedState ? expandedHoverPadding : hoverPadding
-        // У спокої реагуємо на сам виріз, далі — на те, що вже намальовано.
-        let base = isHidden ? geometry.notchRect : panel.frame
-        let zone = base.insetBy(dx: -padding, dy: -padding)
+        let zone = visible.insetBy(dx: -padding, dy: -padding)
 
-        // У спокої ширина залежить від того, чи хтось працює просто зараз.
-        if isHidden {
-            let expected = geometry.windowFrame(sideWidth: idleSideWidth, height: geometry.barHeight)
-            if abs(panel.frame.width - expected.width) > 0.5 {
-                applyState(animated: true)
-            }
+        // Кліки приймаємо лише над самою фігурою: прозорий запас під тінь і
+        // пружину не має перехоплювати кліки, адресовані вікнам під ним.
+        let catchesClicks = state != .hidden && visible.contains(location)
+        if panel.ignoresMouseEvents == catchesClicks {
+            panel.ignoresMouseEvents = !catchesClicks
         }
 
         if zone.contains(location) {
             collapseWorkItem?.cancel()
             collapseWorkItem = nil
-            if isHidden { setState(.compact) }
-        } else if !isHidden, collapseWorkItem == nil {
+            if state == .hidden { setState(.compact) }
+        } else if state != .hidden, collapseWorkItem == nil {
             scheduleCollapse()
         }
     }
@@ -244,7 +305,12 @@ final class NotchWindowController: NSObject {
 
     private func showMenu(at point: NSPoint) {
         guard let container else { return }
+        makeMenu().popUp(positioning: nil, at: point, in: container)
+    }
 
+    /// Одне меню на два входи: правий клік по панелі та іконка в рядку меню.
+    /// Щоразу будується наново, щоб позначки відповідали поточним налаштуванням.
+    func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "Оновити зараз", action: #selector(refreshNow), keyEquivalent: "")
             .target = self
@@ -296,8 +362,7 @@ final class NotchWindowController: NSObject {
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Вийти", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-
-        menu.popUp(positioning: nil, at: point, in: container)
+        return menu
     }
 
     @objc private func refreshNow() {

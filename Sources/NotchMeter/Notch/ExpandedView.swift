@@ -31,11 +31,6 @@ struct ExpandedView: View {
             .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            BottomRoundedShape(radius: Style.expandedCorner)
-                .fill(Color.black)
-        )
-
     }
 
     /// Той самий порядок, що й обабіч вирізу: лівий інструмент — першим.
@@ -44,6 +39,22 @@ struct ExpandedView: View {
         return usage.usage.sorted {
             (order.firstIndex(of: $0.tool) ?? .max) < (order.firstIndex(of: $1.tool) ?? .max)
         }
+    }
+
+    /// Висота панелі залежить від кількості сесій і вікон лімітів. Міряємо на
+    /// окремому view: фігура має знати кінцевий розмір ще до того, як почне
+    /// рости, а вміст на екрані в цю мить ще старий.
+    @MainActor
+    static func measuredHeight(
+        width: CGFloat,
+        geometry: NotchGeometry,
+        usage: UsageStore,
+        activity: ActivityStore
+    ) -> CGFloat {
+        let probe = NSHostingView(rootView: ExpandedView(geometry: geometry, usage: usage, activity: activity))
+        probe.setFrameSize(NSSize(width: width, height: 0))
+        probe.layoutSubtreeIfNeeded()
+        return min(max(probe.fittingSize.height.rounded(.up), 150), 520)
     }
 
     static let clock: DateFormatter = {
@@ -205,17 +216,5 @@ private struct SessionRow: View {
         if let elapsed = session.elapsedDescription { parts.append(elapsed) }
         if let steps = session.steps, steps > 0 { parts.append("\(steps) кр.") }
         return parts.joined(separator: " · ")
-    }
-}
-
-/// Верхні кути лишаємо прямими — панель має читатись як продовження рядка меню.
-struct BottomRoundedShape: Shape {
-    let radius: CGFloat
-
-    func path(in rect: CGRect) -> Path {
-        Path(
-            roundedRect: rect,
-            cornerRadii: RectangleCornerRadii(bottomLeading: radius, bottomTrailing: radius)
-        )
     }
 }

@@ -3,8 +3,7 @@ import SwiftUI
 /// Стан спокою: біля вирізу лишаються тільки крапки активності, та й ті —
 /// лише коли якийсь агент працює або чекає на відповідь.
 ///
-/// Крапки стоять на помітній відстані від вирізу: впритул до нього їх
-/// підрізає край екрана.
+/// Крапки стоять трохи осторонь вирізу, щоб не зливатися з його краєм.
 struct IdleView: View {
     let geometry: NotchGeometry
     var activity: ActivityStore
@@ -22,24 +21,20 @@ struct IdleView: View {
                 .frame(width: sideWidth, alignment: .leading)
         }
         .frame(height: Style.compactHeight)
-        .background(
-            BottomRoundedShape(radius: Style.compactCorner)
-                .fill(Color.black)
-        )
     }
 
     private var sideWidth: CGFloat {
-        Style.idleSideWidth(hasBadge: IdleView.hasBadge(in: activity))
+        Style.idleSideWidth(badgeLength: IdleView.badgeLength(in: activity))
     }
 
-    /// Обидва крила однакові, тож ширину визначає найширше з них.
-    static func hasBadge(in activity: ActivityStore) -> Bool {
-        DisplayPreferences.tools.contains { tool in
+    /// Обидва крила однакові, тож ширину визначає найдовший лічильник.
+    static func badgeLength(in activity: ActivityStore) -> Int {
+        DisplayPreferences.tools.map { tool in
             ActivityDot.badge(
                 working: activity.count(for: tool, state: .working),
                 needsInput: activity.count(for: tool, state: .needsInput)
-            ) != nil
-        }
+            )?.count ?? 0
+        }.max() ?? 0
     }
 
     private func dot(for id: Tool) -> some View {

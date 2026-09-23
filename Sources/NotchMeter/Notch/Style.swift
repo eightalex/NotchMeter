@@ -4,19 +4,31 @@ enum Style {
     static let compactHeight: CGFloat = 32
     /// Вистачає на мітку, шкалу, «100%», мітку вікна й крапку з лічильником.
     static let compactSideWidth: CGFloat = 120
-    /// Крила у спокої — під крапку активності з запасом, щоб її не підрізав
-    /// край вирізу.
-    /// Відступ від краю вирізу. Великий навмисно: система повідомляє межі
-    /// вирізу з запасом, і все, що ближче, він підрізає.
-    static let idleDotInset: CGFloat = 40
+    /// Відступ крапки активності від краю вирізу. Калібровка показала, що
+    /// виріз не зачіпає крапку вже з 12pt; далі — питання вигляду.
+    static let idleDotInset: CGFloat = 24
 
-    /// Крапка сама по собі вузька, а з лічильником («2/1») — помітно ширша.
-    static func idleSideWidth(hasBadge: Bool) -> CGFloat {
-        idleDotInset + (hasBadge ? 40 : 18)
+    /// Крило у спокої — рівно під крапку і лічильник поруч («2» чи «2/1»):
+    /// за ними фігура одразу закінчується, без зайвого чорного поля.
+    static func idleSideWidth(badgeLength: Int) -> CGFloat {
+        let dot = PulsingDot.side
+        let badge = badgeLength > 0 ? CGFloat(badgeLength) * 5.5 + 1 : 0
+        return idleDotInset + dot + badge
     }
     static let expandedSideWidth: CGFloat = 100
-    static let expandedCorner: CGFloat = 14
+
+    // Силует: нижні кути та увігнуті «вушки» зверху в кожному стані.
+    static let notchCorner: CGFloat = 10
     static let compactCorner: CGFloat = 10
+    static let compactEar: CGFloat = 6
+    static let expandedCorner: CGFloat = 22
+    static let expandedEar: CGFloat = 10
+
+    /// Місце під тінь розгорнутої панелі.
+    static let shadowMargin: CGFloat = 28
+    /// Пружина на мить виносить фігуру за кінцевий розмір — вікно на час
+    /// анімації має бути трохи більшим, інакше її край обріжеться.
+    static let springSlack: CGFloat = 18
 
     /// Що ближче до вичерпання ліміту, то тривожніший колір.
     static func gaugeColor(for percent: Double, stale: Bool) -> Color {

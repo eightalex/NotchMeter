@@ -22,12 +22,6 @@ struct CompactView: View {
                 .frame(width: Style.compactSideWidth, alignment: .leading)
         }
         .frame(height: Style.compactHeight)
-        // Чорна підкладка продовжує сам виріз: так текст контрастний і на
-        // світлих шпалерах, а крила виглядають частиною notch.
-        .background(
-            BottomRoundedShape(radius: Style.compactCorner)
-                .fill(Color.black)
-        )
     }
 
     /// Крила дзеркальні: мітка інструменту стоїть на зовнішньому краї, а
