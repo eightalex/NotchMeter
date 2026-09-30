@@ -39,6 +39,8 @@ struct ClaudeSessionScanner: SessionScanner {
         // Після аварійного завершення файл лишається на диску, тому перевіряємо,
         // що процес справді живий.
         guard ProcessProbe.isAlive(pid) else { return nil }
+        // Фоновий CLI, яким NotchMeter оновлює токен, — не ваша сесія.
+        guard !ClaudeTokenRefresher.spawned.contains(pid) else { return nil }
 
         let cwd = payload["cwd"] as? String ?? ""
         let name = payload["name"] as? String

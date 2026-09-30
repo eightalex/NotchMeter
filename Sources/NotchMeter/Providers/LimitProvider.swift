@@ -8,12 +8,76 @@ struct LimitWindow: Codable, Hashable, Identifiable {
     let usedPercent: Double
     let resetsAt: Date?
 
+    /// Час скидання вже минув: вікно почалося заново, і збережений відсоток
+    /// описує попереднє. Буває, коли дані давно не оновлювались.
+    var hasReset: Bool {
+        resetsAt.map { $0 <= Date() } ?? false
+    }
+
+    /// Те, що показуємо: після скидання старий відсоток уже не діє.
+    var currentPercent: Double {
+        hasReset ? 0 : usedPercent
+    }
+
     /// Людський опис часу до скидання: «2 год 14 хв», «12 хв», nil якщо дати немає.
     var resetDescription: String? {
         guard let resetsAt else { return nil }
         let remaining = resetsAt.timeIntervalSinceNow
-        guard remaining > 0 else { return "ось-ось" }
+        guard remaining > 0 else { return "скинуто" }
         return Self.duration(remaining)
+    }
+
+    /// Стисло для тісного місця біля вирізу: «2г14хв», «45хв», «3д».
+    var resetShortDescription: String? {
+        guard let resetsAt else { return nil }
+        let total = Int(resetsAt.timeIntervalSinceNow.rounded())
+        guard total > 0 else { return "0" }
+        let days = total / 86400, hours = (total % 86400) / 3600, minutes = (total % 3600) / 60
+        if days > 0 { return hours > 0 ? "\(days)д\(hours)г" : "\(days)д" }
+        if hours > 0 { return minutes > 0 ? "\(hours)г\(minutes)хв" : "\(hours)г" }
+        return "\(max(minutes, 1))хв"
+    }
+
+    /// Точний момент скидання: сьогодні — «21:59», цього тижня — «чт 16:59»,
+    /// далі — дата.
+    var resetAbsoluteDescription: String? {
+        guard let resetsAt else { return nil }
+        let calendar = Calendar.current
+        if calendar.isDateInToday(resetsAt) { return Self.timeFormatter.string(from: resetsAt) }
+        if resetsAt.timeIntervalSinceNow < 6 * 86400 { return Self.weekdayFormatter.string(from: resetsAt) }
+        return Self.dateFormatter.string(from: resetsAt)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    private static let weekdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "uk_UA")
+        formatter.dateFormat = "EEEEEE HH:mm"
+        return formatter
+    }()
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd.MM HH:mm"
+        return formatter
+    }()
+
+    /// Вид вікна — за ним у налаштуваннях вирішують, чи показувати його.
+    enum Kind {
+        case fiveHour, week, opusWeek, appsWeek, other
+    }
+
+    var kind: Kind {
+        if label.hasPrefix("Opus") { return .opusWeek }
+        if label.hasPrefix("Застосунки") { return .appsWeek }
+        if label == "Тиждень" { return .week }
+        if shortLabel == "5г" { return .fiveHour }
+        return .other
     }
 
     static func duration(_ interval: TimeInterval) -> String {
@@ -77,7 +141,7 @@ struct ProviderUsage: Codable, Hashable, Identifiable {
 
     /// Найбільш заповнене вікно — до нього зараз найближче.
     var primaryWindow: LimitWindow? {
-        windows.max { $0.usedPercent < $1.usedPercent }
+        windows.max { $0.currentPercent < $1.currentPercent }
     }
 
     /// Вікно для компактного вигляду. Якщо обраного вікна в інструмента немає

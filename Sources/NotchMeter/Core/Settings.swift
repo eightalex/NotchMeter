@@ -11,6 +11,8 @@ enum Settings {
         static let cachedUsage = "cachedUsage"
         static let leftTool = "leftTool"
         static let compactWindow = "compactWindow"
+        static let externalBarHeight = "externalBarHeight"
+        static let screenChoice = "screenChoice"
     }
 
     /// Множник до базових інтервалів провайдерів: 1 — як задумано, 2 — удвічі рідше.
@@ -51,6 +53,17 @@ enum CompactWindowChoice: String, CaseIterable {
     }
 }
 
+/// На якому моніторі показувати виріз.
+enum ScreenChoice: Hashable, Codable {
+    /// Екран зі справжнім вирізом, а без нього — той, де рядок меню.
+    case automatic
+    /// Завжди той екран, де рядок меню («головний» у Системних параметрах).
+    case main
+    /// Конкретний монітор. Назву зберігаємо, щоб показати його в налаштуваннях,
+    /// навіть коли він від'єднаний.
+    case display(uuid: String, name: String)
+}
+
 /// Налаштування вигляду панелі. На відміну від `Settings`, спостережувані:
 /// панель перемальовується одразу після вибору в меню.
 @MainActor
@@ -71,6 +84,18 @@ final class DisplayPreferences {
         didSet { UserDefaults.standard.set(compactWindow.rawValue, forKey: Settings.Key.compactWindow) }
     }
 
+    /// Висота вирізу на екрані без справжнього вирізу; 0 — як у рядка меню.
+    var externalBarHeight: Double {
+        didSet { UserDefaults.standard.set(externalBarHeight, forKey: Settings.Key.externalBarHeight) }
+    }
+
+    var screenChoice: ScreenChoice {
+        didSet {
+            guard let data = try? JSONEncoder().encode(screenChoice) else { return }
+            UserDefaults.standard.set(data, forKey: Settings.Key.screenChoice)
+        }
+    }
+
     var rightTool: Tool {
         Self.tools.first { $0 != leftTool } ?? .claude
     }
@@ -85,5 +110,8 @@ final class DisplayPreferences {
         leftTool = stored.flatMap { Self.tools.contains($0) ? $0 : nil } ?? .codex
         compactWindow = defaults.string(forKey: Settings.Key.compactWindow)
             .flatMap(CompactWindowChoice.init(rawValue:)) ?? .automatic
+        externalBarHeight = defaults.double(forKey: Settings.Key.externalBarHeight)
+        screenChoice = defaults.data(forKey: Settings.Key.screenChoice)
+            .flatMap { try? JSONDecoder().decode(ScreenChoice.self, from: $0) } ?? .automatic
     }
 }

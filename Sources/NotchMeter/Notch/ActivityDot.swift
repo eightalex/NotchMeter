@@ -7,6 +7,8 @@ struct ActivityDot: View {
     let tool: Tool
     let working: Int
     let needsInput: Int
+    /// Лічильник поруч із крапкою, коли сесій кілька.
+    var showsBadge = true
 
     private var isVisible: Bool { working > 0 || needsInput > 0 }
 
@@ -34,7 +36,7 @@ struct ActivityDot: View {
                 // доки хоч одна сесія чекає відповіді.
                 PulsingDot(color: color, pulsing: shouldPulse, ringed: needsInput > 0)
 
-                if let badge {
+                if showsBadge, let badge {
                     Text(badge)
                         .font(.system(size: 9, weight: .semibold).monospacedDigit())
                         .foregroundStyle(Color(nsColor: color))
@@ -51,9 +53,9 @@ struct ActivityDot: View {
 struct PulsingDot: NSViewRepresentable {
     static let diameter: CGFloat = 6
     /// Прозорий запас довкола кола: коли AppKit вирівнює шар по пікселях,
-    /// коло впритул до меж шару втрачало крайній піксель — звідси «обрізання».
+    /// коло впритул до меж шару втрачало крайній піксель.
     static let padding: CGFloat = 1
-    static var side: CGFloat { diameter + padding * 2 }
+    static let side: CGFloat = diameter + padding * 2
 
     let color: NSColor
     let pulsing: Bool
@@ -82,7 +84,6 @@ struct PulsingDot: NSViewRepresentable {
             super.init(frame: CGRect(x: 0, y: 0, width: PulsingDot.side, height: PulsingDot.side))
             wantsLayer = true
             layer?.masksToBounds = false
-            dot.cornerRadius = PulsingDot.diameter / 2
             dot.borderColor = NSColor.white.cgColor
             layer?.addSublayer(dot)
         }
@@ -101,6 +102,7 @@ struct PulsingDot: NSViewRepresentable {
             // Коло завжди по центру власного розміру, а не на весь шар.
             let d = PulsingDot.diameter
             dot.frame = CGRect(x: (bounds.width - d) / 2, y: (bounds.height - d) / 2, width: d, height: d)
+            dot.cornerRadius = d / 2
             CATransaction.commit()
         }
 

@@ -1,5 +1,4 @@
 import AppKit
-import ServiceManagement
 import SwiftUI
 
 /// Тримає панель на місці, стежить за курсором і вирішує, коли розгортатись.
@@ -8,12 +7,18 @@ final class NotchWindowController: NSObject {
     private let usage: UsageStore
     private let activity: ActivityStore
 
+    /// Відкриває вікно налаштувань — його тримає делегат застосунку.
+    var onOpenSettings: (() -> Void)?
+
     private var panel: NotchPanel?
     private var hostingView: NSHostingView<NotchRootView>?
     private var container: EventCatcherView?
     private var geometry: NotchGeometry?
 
     private var state: NotchState = .hidden
+    /// Стан, закріплений із налаштувань для перегляду: поки він є, курсор і
+    /// кліки стан не змінюють.
+    private var pinnedState: NotchState?
     /// Розміри фігури, до яких вона зараз прямує (або вже досягла).
     private var metrics: NotchMetrics?
     private var expandedHeight: CGFloat = 200
@@ -137,6 +142,7 @@ final class NotchWindowController: NSObject {
             for: state,
             geometry: geometry,
             idleSideWidth: idleSideWidth,
+            compactSideWidth: Style.compactSideWidth(badgeLength: IdleView.badgeLength(in: activity)),
             expandedHeight: expandedHeight
         )
     }
@@ -224,7 +230,17 @@ final class NotchWindowController: NSObject {
         trackCursor()
         guard let geometry else { return }
 
-        if state == .hidden, targetMetrics(geometry: geometry) != metrics {
+        // Рядок меню міг змінити висоту, а в налаштуваннях — висоту вирізу на
+        // зовнішньому моніторі. Окремого сповіщення про це немає.
+        if ticks % 4 == 0, let fresh = NotchGeometry.current(),
+           fresh.notchRect != geometry.notchRect || fresh.screen.displayID != geometry.screen.displayID {
+            rebuild()
+            return
+        }
+
+        // У спокої й при наведенні розмір залежить від активності та від
+        // увімкненого в налаштуваннях вмісту — підлаштовуємось на ходу.
+        if state != .expanded, targetMetrics(geometry: geometry) != metrics {
             applyState(animation: NotchState.adjustmentAnimation)
         }
 
@@ -264,6 +280,9 @@ final class NotchWindowController: NSObject {
             panel.ignoresMouseEvents = !catchesClicks
         }
 
+        // Закріплений для перегляду стан курсор не змінює.
+        guard pinnedState == nil else { return }
+
         if zone.contains(location) {
             collapseWorkItem?.cancel()
             collapseWorkItem = nil
@@ -287,7 +306,20 @@ final class NotchWindowController: NSObject {
     }
 
     private func toggleExpanded() {
+        guard pinnedState == nil else { return }
         setState(isExpandedState ? .compact : .expanded)
+    }
+
+    /// Тримати виріз у заданому стані, щоб зміни в налаштуваннях було видно
+    /// одразу, без наведення й кліків. `nil` — повернутися до звичайної
+    /// поведінки.
+    func pin(_ state: NotchState?) {
+        pinnedState = state
+        collapseWorkItem?.cancel()
+        collapseWorkItem = nil
+        setState(state ?? .hidden)
+        // Якщо курсор якраз над вирізом, стан одразу відповідатиме йому.
+        if state == nil { trackCursor() }
     }
 
     // MARK: - Події системи
@@ -309,95 +341,22 @@ final class NotchWindowController: NSObject {
     }
 
     /// Одне меню на два входи: правий клік по панелі та іконка в рядку меню.
-    /// Щоразу будується наново, щоб позначки відповідали поточним налаштуванням.
+    /// Самі налаштування живуть в окремому вікні; тут — лише шлях до нього
+    /// та вихід, бо іконки в Dock у застосунку немає.
     func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        menu.addItem(withTitle: "Оновити зараз", action: #selector(refreshNow), keyEquivalent: "")
-            .target = self
 
-        let intervals = NSMenu()
-        for (title, multiplier) in [("Звичайний", 1.0), ("Удвічі рідше", 2.0), ("Уп'ятеро рідше", 5.0)] {
-            let item = NSMenuItem(title: title, action: #selector(changeInterval(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = multiplier
-            item.state = Settings.refreshMultiplier == multiplier ? .on : .off
-            intervals.addItem(item)
-        }
-        let intervalItem = NSMenuItem(title: "Частота оновлення", action: nil, keyEquivalent: "")
-        intervalItem.submenu = intervals
-        menu.addItem(intervalItem)
-
-        let prefs = DisplayPreferences.shared
-
-        let sides = NSMenu()
-        for left in DisplayPreferences.tools {
-            let right = DisplayPreferences.tools.first { $0 != left } ?? left
-            let title = "\(left.displayName) ліворуч, \(right.displayName) праворуч"
-            let item = NSMenuItem(title: title, action: #selector(changeLeftTool(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = left.rawValue
-            item.state = prefs.leftTool == left ? .on : .off
-            sides.addItem(item)
-        }
-        let sidesItem = NSMenuItem(title: "Розташування", action: nil, keyEquivalent: "")
-        sidesItem.submenu = sides
-        menu.addItem(sidesItem)
-
-        let windows = NSMenu()
-        for choice in CompactWindowChoice.allCases {
-            let item = NSMenuItem(title: choice.menuTitle, action: #selector(changeCompactWindow(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = choice.rawValue
-            item.state = prefs.compactWindow == choice ? .on : .off
-            windows.addItem(item)
-        }
-        let windowsItem = NSMenuItem(title: "Ліміт в індикаторі", action: nil, keyEquivalent: "")
-        windowsItem.submenu = windows
-        menu.addItem(windowsItem)
-
-        let loginItem = NSMenuItem(title: "Запускати при вході", action: #selector(toggleLoginItem), keyEquivalent: "")
-        loginItem.target = self
-        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(loginItem)
+        let settings = NSMenuItem(title: "Налаштування…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Вийти", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Вийти з NotchMeter", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         return menu
     }
 
-    @objc private func refreshNow() {
-        usage.refreshAll(force: true)
-        activity.scan()
-    }
-
-    @objc private func changeInterval(_ sender: NSMenuItem) {
-        guard let multiplier = sender.representedObject as? Double else { return }
-        Settings.refreshMultiplier = multiplier
-        usage.start()
-    }
-
-    @objc private func changeLeftTool(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let tool = Tool(rawValue: raw) else { return }
-        DisplayPreferences.shared.leftTool = tool
-    }
-
-    @objc private func changeCompactWindow(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-              let choice = CompactWindowChoice(rawValue: raw) else { return }
-        DisplayPreferences.shared.compactWindow = choice
-    }
-
-    @objc private func toggleLoginItem() {
-        do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
-        } catch {
-            NSSound.beep()
-        }
+    @objc private func openSettings() {
+        onOpenSettings?()
     }
 }
 

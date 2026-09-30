@@ -9,18 +9,30 @@ struct IdleView: View {
     var activity: ActivityStore
 
     var body: some View {
+        // Крило — це прозора підкладка фіксованої ширини, а крапка лежить
+        // поверх неї. Раніше крапка сама задавала крило, і коли агент мовчав,
+        // крило схлопувалось до нуля: весь вміст з'їжджав на пів крила й
+        // переставав збігатися з вирізом.
         HStack(spacing: 0) {
-            dot(for: DisplayPreferences.shared.leftTool)
-                .padding(.trailing, Style.idleDotInset)
-                .frame(width: sideWidth, alignment: .trailing)
+            Color.clear
+                .frame(width: sideWidth)
+                .overlay(alignment: .trailing) {
+                    dot(for: DisplayPreferences.shared.leftTool)
+                        .padding(.trailing, Style.idleDotInset)
+                        .modifier(VerticalNudge(offset: Style.idleDotVerticalOffset))
+                }
 
             Color.clear.frame(width: geometry.notchWidth)
 
-            dot(for: DisplayPreferences.shared.rightTool)
-                .padding(.leading, Style.idleDotInset)
-                .frame(width: sideWidth, alignment: .leading)
+            Color.clear
+                .frame(width: sideWidth)
+                .overlay(alignment: .leading) {
+                    dot(for: DisplayPreferences.shared.rightTool)
+                        .padding(.leading, Style.idleDotInset)
+                        .modifier(VerticalNudge(offset: Style.idleDotVerticalOffset))
+                }
         }
-        .frame(height: Style.compactHeight)
+        .frame(height: Style.barHeight(for: geometry))
     }
 
     private var sideWidth: CGFloat {
@@ -43,5 +55,17 @@ struct IdleView: View {
             working: activity.count(for: id, state: .working),
             needsInput: activity.count(for: id, state: .needsInput)
         )
+    }
+}
+
+/// Зсув по вертикалі відступами, а не `.offset`: крапка — шар AppKit, і
+/// `.offset` SwiftUI вона ігнорує, а відступи враховує.
+private struct VerticalNudge: ViewModifier {
+    let offset: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.top, max(0, offset * 2))
+            .padding(.bottom, max(0, -offset * 2))
     }
 }

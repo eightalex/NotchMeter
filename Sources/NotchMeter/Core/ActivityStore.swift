@@ -89,10 +89,23 @@ final class ActivityStore {
     }
 
     var activeSessions: [AgentSession] {
-        sessions
-            .filter { $0.state != .idle }
+        panelSessions(includingIdle: false)
+    }
+
+    /// Сесії для панелі: спершу ті, що чекають відповіді, потім ті, що
+    /// працюють, а наприкінці — у простої, якщо їх теж показуємо.
+    func panelSessions(includingIdle: Bool) -> [AgentSession] {
+        func rank(_ state: AgentState) -> Int {
+            switch state {
+            case .needsInput: return 0
+            case .working: return 1
+            case .idle: return 2
+            }
+        }
+        return sessions
+            .filter { includingIdle || $0.state != .idle }
             .sorted { lhs, rhs in
-                if lhs.state != rhs.state { return lhs.state == .needsInput }
+                if lhs.state != rhs.state { return rank(lhs.state) < rank(rhs.state) }
                 return (lhs.since ?? .distantPast) < (rhs.since ?? .distantPast)
             }
     }

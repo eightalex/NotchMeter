@@ -6,8 +6,8 @@ import Foundation
 /// Оновлювати його самим не можна: refresh-токен при оновленні ротується,
 /// і запущені сесії Claude Code лишаються зі старим, а запис у чужий елемент
 /// Keychain ламає самому Claude Code доступ до нього — macOS починає питати
-/// пароль для `security` щоразу, коли CLI читає токен. Протухлий токен
-/// оновить сам Claude Code при наступному зверненні до API.
+/// пароль для `security` щоразу, коли CLI читає токен. Тому протухлий токен
+/// просимо оновити сам Claude Code — див. `ClaudeTokenRefresher`.
 actor ClaudeCodeProvider: LimitProvider {
     nonisolated let tool = Tool.claude
     nonisolated let refreshInterval: TimeInterval = 120
@@ -27,14 +27,26 @@ actor ClaudeCodeProvider: LimitProvider {
 
     func fetch() async -> ProviderUsage {
         do {
-            let credentials = try KeychainStore.readCredentials()
-            guard let oauth = credentials["claudeAiOauth"] as? [String: Any] else {
-                return .failed(tool: tool, message: "Claude Code не авторизований")
+            var oauth = try readOAuth()
+
+            // Десктопний Claude тримає свій токен окремо, тож поки працюєте
+            // лише в ньому, цей запис ніхто не оновлює. Просимо CLI.
+            if isExpired(oauth), !isRefreshExpired(oauth), await ClaudeTokenRefresher.shared.refresh() {
+                oauth = try readOAuth()
             }
 
             let plan = oauth["subscriptionType"] as? String
             let token = try validAccessToken(oauth: oauth)
-            return try await requestUsage(token: token, plan: plan)
+            do {
+                return try await requestUsage(token: token, plan: plan)
+            } catch ProviderError.unauthorized {
+                // Токен відкликали раніше строку — одна спроба через CLI.
+                guard await ClaudeTokenRefresher.shared.refresh() else {
+                    throw ProviderError.message("токен відкликано, а Claude Code не зміг його оновити")
+                }
+                let fresh = try readOAuth()
+                return try await requestUsage(token: try validAccessToken(oauth: fresh), plan: plan)
+            }
         } catch let error as ProviderError {
             if case .throttled(let until) = error {
                 return .failed(tool: tool, message: "забагато запитів, пауза", retryAfter: until)
@@ -47,23 +59,39 @@ actor ClaudeCodeProvider: LimitProvider {
 
     // MARK: - Токен
 
+    private func readOAuth() throws -> [String: Any] {
+        let credentials = try KeychainStore.readCredentials()
+        guard let oauth = credentials["claudeAiOauth"] as? [String: Any] else {
+            throw ProviderError.message("Claude Code не авторизований")
+        }
+        return oauth
+    }
+
+    private func isExpired(_ oauth: [String: Any]) -> Bool {
+        let expiresAt = (oauth["expiresAt"] as? Double).map { $0 / 1000 } ?? 0
+        return Date().timeIntervalSince1970 + Self.expiryMargin >= expiresAt
+    }
+
+    /// Коли протух і refresh-токен, сам Claude Code теж не оновиться —
+    /// потрібен новий вхід.
+    private func isRefreshExpired(_ oauth: [String: Any]) -> Bool {
+        let refreshExpiresAt = (oauth["refreshTokenExpiresAt"] as? Double).map { $0 / 1000 } ?? .greatestFiniteMagnitude
+        return Date().timeIntervalSince1970 >= refreshExpiresAt
+    }
+
     private func validAccessToken(oauth: [String: Any]) throws -> String {
         guard let accessToken = oauth["accessToken"] as? String else {
             throw ProviderError.message("у Keychain немає access-токена")
         }
+        guard isExpired(oauth) else { return accessToken }
 
-        let expiresAt = (oauth["expiresAt"] as? Double).map { $0 / 1000 } ?? 0
-        if Date().timeIntervalSince1970 + Self.expiryMargin < expiresAt {
-            return accessToken
-        }
-
-        // Коли протух і refresh-токен, сам Claude Code теж не оновиться —
-        // потрібен новий вхід.
-        let refreshExpiresAt = (oauth["refreshTokenExpiresAt"] as? Double).map { $0 / 1000 } ?? .greatestFiniteMagnitude
-        guard Date().timeIntervalSince1970 < refreshExpiresAt else {
+        if isRefreshExpired(oauth) {
             throw ProviderError.message("потрібен вхід: claude auth login")
         }
-        throw ProviderError.message("токен протух — оновиться, щойно запрацює Claude Code")
+        if ClaudeTokenRefresher.locateCLI() == nil {
+            throw ProviderError.message("токен протух, а Claude Code CLI не знайдено")
+        }
+        throw ProviderError.message("токен протух, Claude Code не зміг його оновити")
     }
 
     // MARK: - Ліміти
@@ -85,7 +113,7 @@ actor ClaudeCodeProvider: LimitProvider {
             throw ProviderError.throttled(until: Date().addingTimeInterval(seconds))
         }
         if http.statusCode == 401 {
-            throw ProviderError.message("токен відкликано — оновиться, щойно запрацює Claude Code")
+            throw ProviderError.unauthorized
         }
         guard http.statusCode == 200 else {
             throw ProviderError.message("API лімітів відповів HTTP \(http.statusCode)")
@@ -146,11 +174,13 @@ actor ClaudeCodeProvider: LimitProvider {
 enum ProviderError: LocalizedError {
     case message(String)
     case throttled(until: Date)
+    case unauthorized
 
     var errorDescription: String? {
         switch self {
         case .message(let text): return text
         case .throttled: return "забагато запитів, пауза"
+        case .unauthorized: return "токен відкликано"
         }
     }
 }

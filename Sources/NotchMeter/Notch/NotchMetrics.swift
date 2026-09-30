@@ -17,10 +17,12 @@ struct NotchMetrics: Equatable {
         CGSize(width: shapeWidth + shadowMargin * 2, height: height + shadowMargin)
     }
 
+    @MainActor
     static func make(
         for state: NotchState,
         geometry: NotchGeometry,
         idleSideWidth: CGFloat,
+        compactSideWidth: CGFloat,
         expandedHeight: CGFloat
     ) -> NotchMetrics {
         switch state {
@@ -38,15 +40,15 @@ struct NotchMetrics: Equatable {
             // крапкам, — вушка з'являються вже при наведенні.
             return NotchMetrics(
                 bodyWidth: geometry.notchWidth + idleSideWidth * 2,
-                height: geometry.barHeight,
+                height: Style.barHeight(for: geometry),
                 topRadius: 0,
                 bottomRadius: Style.compactCorner,
                 shadowMargin: 0
             )
         case .compact:
             return NotchMetrics(
-                bodyWidth: geometry.notchWidth + Style.compactSideWidth * 2,
-                height: Style.compactHeight,
+                bodyWidth: geometry.notchWidth + compactSideWidth * 2,
+                height: Style.barHeight(for: geometry),
                 topRadius: Style.compactEar,
                 bottomRadius: Style.compactCorner,
                 shadowMargin: 0

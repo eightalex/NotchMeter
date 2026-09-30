@@ -8,20 +8,27 @@ struct ExpandedView: View {
     var activity: ActivityStore
 
     var body: some View {
+        let content = ContentPreferences.shared.values
+        let providers = orderedUsage.filter { content.panelShows($0.tool) }
+
         VStack(alignment: .leading, spacing: 0) {
             // Смуга заввишки з рядок меню — під нею ховається сам виріз.
             Color.clear.frame(height: geometry.barHeight)
 
             VStack(alignment: .leading, spacing: 12) {
-                ForEach(orderedUsage) { entry in
-                    ProviderRow(entry: entry)
+                ForEach(providers) { entry in
+                    ProviderRow(entry: entry, content: content)
                 }
 
-                Divider().opacity(0.4)
+                if !providers.isEmpty, content.panelShowsSessions {
+                    Divider().opacity(0.4)
+                }
 
-                ActivitySection(activity: activity)
+                if content.panelShowsSessions {
+                    ActivitySection(activity: activity, content: content)
+                }
 
-                if let updated = usage.lastUpdated {
+                if content.panelShowsUpdatedAt, let updated = usage.lastUpdated {
                     Text("оновлено \(Self.clock.string(from: updated))")
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
@@ -66,14 +73,17 @@ struct ExpandedView: View {
 
 private struct ProviderRow: View {
     let entry: ProviderUsage
+    let content: ContentPreferences.Values
 
     var body: some View {
+        let windows = entry.windows.filter { content.panelShows($0.kind) }
+
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
                 Text(entry.displayName)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(nsColor: entry.tool.accent))
-                if let plan = entry.planName {
+                if content.panelShowsPlan, let plan = entry.planName {
                     Text(plan)
                         .font(.system(size: 9, weight: .medium))
                         .padding(.horizontal, 5)
@@ -82,7 +92,7 @@ private struct ProviderRow: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
-                if entry.isStale, !entry.windows.isEmpty {
+                if content.panelShowsStale, entry.isStale, !entry.windows.isEmpty {
                     Text("застаріло")
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
@@ -90,33 +100,15 @@ private struct ProviderRow: View {
             }
 
             if entry.windows.isEmpty {
-                Text(entry.error ?? "немає даних")
+                Text(content.panelShowsErrors ? (entry.error ?? "немає даних") : "немає даних")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(entry.windows) { window in
-                    HStack(spacing: 8) {
-                        Text(window.label)
-                            .font(.system(size: 10))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 74, alignment: .leading)
-
-                        GaugeBar(percent: window.usedPercent, stale: entry.isStale, width: 96, height: 4)
-
-                        Text("\(Int(window.usedPercent.rounded()))%")
-                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                            .frame(width: 32, alignment: .trailing)
-
-                        if let reset = window.resetDescription {
-                            Text("· \(reset)")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.tertiary)
-                        }
-                        Spacer(minLength: 0)
-                    }
+                ForEach(windows) { window in
+                    windowRow(window)
                 }
 
-                if let error = entry.error {
+                if content.panelShowsErrors, let error = entry.error {
                     Text(error)
                         .font(.system(size: 9))
                         .foregroundStyle(Style.warningColor)
@@ -124,19 +116,71 @@ private struct ProviderRow: View {
             }
         }
     }
+
+    private func windowRow(_ window: LimitWindow) -> some View {
+        let shown = content.panelPercentMode.value(fromUsed: window.currentPercent)
+        return HStack(spacing: 8) {
+            Text(window.label)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .frame(width: 74, alignment: .leading)
+
+            if content.panelShowsGauge {
+                GaugeBar(
+                    percent: shown,
+                    stale: entry.isStale,
+                    width: CGFloat(content.panelGaugeWidth),
+                    height: 4,
+                    usedPercent: window.currentPercent,
+                    tint: content.panelGaugeColoring == .accent ? Color(nsColor: entry.tool.accent) : nil
+                )
+            }
+
+            Text("\(Int(shown.rounded()))%")
+                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                .frame(width: 32, alignment: .trailing)
+
+            if let reset = resetText(window) {
+                Text("· \(reset)")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func resetText(_ window: LimitWindow) -> String? {
+        // Після скидання точний час уже нічого не каже — лише «скинуто».
+        if window.hasReset { return content.panelResetFormat == .hidden ? nil : window.resetDescription }
+        switch content.panelResetFormat {
+        case .relative:
+            return window.resetDescription
+        case .absolute:
+            return window.resetAbsoluteDescription
+        case .both:
+            guard let relative = window.resetDescription else { return nil }
+            guard let absolute = window.resetAbsoluteDescription else { return relative }
+            return "\(relative) (\(absolute))"
+        case .hidden:
+            return nil
+        }
+    }
 }
 
 private struct ActivitySection: View {
     var activity: ActivityStore
+    let content: ContentPreferences.Values
 
     var body: some View {
         // Звернення до tick прив'язує лічильники тривалості до секундного такту.
         let _ = activity.tick
-        let sessions = activity.activeSessions
+        let sessions = activity.panelSessions(includingIdle: content.panelIncludesIdleSessions)
+        let limit = max(1, content.panelMaxSessions)
 
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text("Виконується")
+                Text(content.panelIncludesIdleSessions ? "Сесії" : "Виконується")
                     .font(.system(size: 11, weight: .semibold))
                 if !sessions.isEmpty {
                     Text("\(sessions.count)")
@@ -148,15 +192,15 @@ private struct ActivitySection: View {
             }
 
             if sessions.isEmpty {
-                Text("Немає активних задач")
+                Text(content.panelIncludesIdleSessions ? "Немає відкритих сесій" : "Немає активних задач")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(sessions.prefix(6)) { session in
-                    SessionRow(session: session)
+                ForEach(sessions.prefix(limit)) { session in
+                    SessionRow(session: session, content: content)
                 }
-                if sessions.count > 6 {
-                    Text("і ще \(sessions.count - 6)…")
+                if sessions.count > limit {
+                    Text("і ще \(sessions.count - limit)…")
                         .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
                 }
@@ -167,6 +211,7 @@ private struct ActivitySection: View {
 
 private struct SessionRow: View {
     let session: AgentSession
+    let content: ContentPreferences.Values
 
     private var color: Color {
         Color(nsColor: session.tool.accent)
@@ -193,28 +238,35 @@ private struct SessionRow: View {
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(color)
 
-            Text(session.title)
-                .font(.system(size: 10))
-                .lineLimit(1)
-                .truncationMode(.middle)
+            if content.panelSessionShowsTitle {
+                Text(session.title)
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
 
-            Text("· \(session.directory)")
-                .font(.system(size: 9))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
+            if content.panelSessionShowsDirectory {
+                Text(content.panelSessionShowsTitle ? "· \(session.directory)" : session.directory)
+                    .font(.system(size: content.panelSessionShowsTitle ? 9 : 10))
+                    .foregroundStyle(content.panelSessionShowsTitle ? .tertiary : .primary)
+                    .lineLimit(1)
+            }
 
             Spacer(minLength: 4)
 
-            Text(detail)
-                .font(.system(size: 9).monospacedDigit())
-                .foregroundStyle(.secondary)
+            if let detail {
+                Text(detail)
+                    .font(.system(size: 9).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
-    private var detail: String {
-        var parts = [stateText]
-        if let elapsed = session.elapsedDescription { parts.append(elapsed) }
-        if let steps = session.steps, steps > 0 { parts.append("\(steps) кр.") }
-        return parts.joined(separator: " · ")
+    private var detail: String? {
+        var parts: [String] = []
+        if content.panelSessionShowsState { parts.append(stateText) }
+        if content.panelSessionShowsElapsed, let elapsed = session.elapsedDescription { parts.append(elapsed) }
+        if content.panelSessionShowsSteps, let steps = session.steps, steps > 0 { parts.append("\(steps) кр.") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }

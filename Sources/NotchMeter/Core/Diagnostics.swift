@@ -14,8 +14,8 @@ enum Diagnostics {
                 print("  (нічого) \(result.error ?? "")")
             }
             for window in result.windows {
-                let reset = window.resetDescription.map { " · скидається через \($0)" } ?? ""
-                print(String(format: "  %-14@ %5.1f%%%@", window.label as NSString, window.usedPercent, reset))
+                let reset = window.resetDescription.map { window.hasReset ? " · \($0)" : " · скидається через \($0)" } ?? ""
+                print(String(format: "  %-14@ %5.1f%%%@", window.label as NSString, window.currentPercent, reset))
             }
             if !result.windows.isEmpty, let error = result.error {
                 print("  ! \(error)")

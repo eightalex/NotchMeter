@@ -46,6 +46,15 @@ final class UsageStore {
         timers.removeAll()
     }
 
+    /// Як часто кожен провайдер опитується за такого множника — для підказки
+    /// в налаштуваннях.
+    func refreshIntervals(multiplier: Double) -> [(tool: Tool, interval: TimeInterval)] {
+        providers.map { ($0.tool, $0.refreshInterval * multiplier) }
+    }
+
+    /// Мінімальна пауза між оновленнями, які просить сама панель.
+    static var onDemandMinimumGap: TimeInterval { onDemandGap }
+
     /// `force` — для пункту меню «Оновити зараз»: там чекати не треба.
     func refreshAll(force: Bool = false) {
         for provider in providers {

@@ -8,69 +8,101 @@ struct CompactView: View {
 
     var body: some View {
         let prefs = DisplayPreferences.shared
+        let sideWidth = Style.compactSideWidth(badgeLength: IdleView.badgeLength(in: activity))
         HStack(spacing: 0) {
             wing(for: prefs.leftTool, mirrored: false)
-                .padding(.trailing, 10)
-                .frame(width: Style.compactSideWidth, alignment: .trailing)
+                .padding(.trailing, Style.compactNotchGap)
+                .frame(width: sideWidth, alignment: .trailing)
 
             // Під самим вирізом пікселів немає — лишаємо порожнечу.
             Color.clear
                 .frame(width: geometry.notchWidth)
 
             wing(for: prefs.rightTool, mirrored: true)
-                .padding(.leading, 10)
-                .frame(width: Style.compactSideWidth, alignment: .leading)
+                .padding(.leading, Style.compactNotchGap)
+                .frame(width: sideWidth, alignment: .leading)
         }
-        .frame(height: Style.compactHeight)
+        .frame(height: Style.barHeight(for: geometry))
     }
 
-    /// Крила дзеркальні: мітка інструменту стоїть на зовнішньому краї, а
-    /// індикатор активності — впритул до вирізу, куди й так дивиться око.
+    /// Складові крила — в порядку для лівого крила, від зовнішнього краю до
+    /// вирізу. Праве крило дзеркальне: мітка агента завжди на зовнішньому
+    /// краї, а індикатор активності — впритул до вирізу.
+    private enum Element: Hashable {
+        case label, gauge, percent, windowTag, resetTime, activity, missing
+    }
+
+    private func elements(hasWindow: Bool) -> [Element] {
+        let content = ContentPreferences.shared.values
+        var result: [Element] = []
+        if content.hoverLabel != .hidden { result.append(.label) }
+        if hasWindow {
+            if content.hoverShowsGauge { result.append(.gauge) }
+            if content.hoverShowsPercent { result.append(.percent) }
+            if content.hoverShowsWindowTag { result.append(.windowTag) }
+            if content.hoverShowsResetTime { result.append(.resetTime) }
+        } else {
+            result.append(.missing)
+        }
+        if content.hoverShowsActivity { result.append(.activity) }
+        return result
+    }
+
     @ViewBuilder
-    private func wing(for id: Tool, mirrored: Bool) -> some View {
-        let short = id.shortName
-        let entry = usage.usage(for: id)
-        let stale = entry?.isStale ?? true
-        let dot = ActivityDot(
-            tool: id,
-            working: activity.count(for: id, state: .working),
-            needsInput: activity.count(for: id, state: .needsInput)
-        )
+    private func wing(for tool: Tool, mirrored: Bool) -> some View {
+        let window = usage.usage(for: tool)?.window(for: DisplayPreferences.shared.compactWindow)
+        let order = elements(hasWindow: window != nil)
 
         HStack(spacing: 5) {
-            if mirrored { dot }
-            if !mirrored { label(short, tool: id) }
-
-            if let window = entry?.window(for: DisplayPreferences.shared.compactWindow) {
-                // Мітка обов'язкова: у автоматичному режимі вікно в кожного
-                // інструмента своє, та й обране вікно буває недоступним.
-                if mirrored {
-                    windowTag(window.shortLabel)
-                    percent(window.usedPercent, stale: stale)
-                    GaugeBar(percent: window.usedPercent, stale: stale)
-                } else {
-                    GaugeBar(percent: window.usedPercent, stale: stale)
-                    percent(window.usedPercent, stale: stale)
-                    windowTag(window.shortLabel)
-                }
-            } else {
-                Text("—")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.secondary)
+            ForEach(mirrored ? order.reversed() : order, id: \.self) { element in
+                view(for: element, tool: tool, window: window)
             }
-
-            if mirrored { label(short, tool: id) }
-            if !mirrored { dot }
         }
     }
 
-    private func label(_ text: String, tool: Tool) -> some View {
-        Text(text)
-            .font(.system(size: 9, weight: .bold))
-            .foregroundStyle(Color(nsColor: tool.accent))
+    @ViewBuilder
+    private func view(for element: Element, tool: Tool, window: LimitWindow?) -> some View {
+        let content = ContentPreferences.shared.values
+        let stale = usage.usage(for: tool)?.isStale ?? true
+
+        switch element {
+        case .label:
+            Text(content.hoverLabel == .full ? tool.displayName : tool.shortName)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(Color(nsColor: tool.accent))
+                .fixedSize()
+        case .gauge:
+            if let window {
+                GaugeBar(
+                    percent: content.hoverPercentMode.value(fromUsed: window.currentPercent),
+                    stale: stale,
+                    usedPercent: window.currentPercent,
+                    tint: content.hoverGaugeColoring == .accent ? Color(nsColor: tool.accent) : nil
+                )
+            }
+        case .percent:
+            if let window {
+                percent(content.hoverPercentMode.value(fromUsed: window.currentPercent), stale: stale)
+            }
+        case .windowTag:
+            if let window { smallText(window.shortLabel) }
+        case .resetTime:
+            if let reset = window?.resetShortDescription { smallText(reset) }
+        case .activity:
+            ActivityDot(
+                tool: tool,
+                working: activity.count(for: tool, state: .working),
+                needsInput: activity.count(for: tool, state: .needsInput),
+                showsBadge: content.hoverShowsBadge
+            )
+        case .missing:
+            Text("—")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
     }
 
-    private func windowTag(_ text: String) -> some View {
+    private func smallText(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 8, weight: .medium))
             .foregroundStyle(.secondary)
