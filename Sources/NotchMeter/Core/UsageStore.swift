@@ -13,6 +13,8 @@ final class UsageStore {
     @ObservationIgnored private var inFlight: Set<Tool> = []
     @ObservationIgnored private var lastAttempt: [Tool: Date] = [:]
     @ObservationIgnored private var pausedUntil: [Tool: Date] = [:]
+    /// Кожен успішний вимір лімітів — для історії у статистиці.
+    @ObservationIgnored var onUpdate: ((ProviderUsage) -> Void)?
 
     /// Панель просить оновлення щоразу, коли з'являється на очі, — без цієї
     /// паузи кілька наведень поспіль вичерпують ліміт запитів до API.
@@ -112,6 +114,7 @@ final class UsageStore {
 
         lastUpdated = Date()
         Settings.saveCachedUsage(usage)
+        if !result.windows.isEmpty { onUpdate?(result) }
     }
 
     func usage(for tool: Tool) -> ProviderUsage? {

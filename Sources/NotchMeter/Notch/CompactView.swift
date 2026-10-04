@@ -55,22 +55,32 @@ struct CompactView: View {
 
         HStack(spacing: 5) {
             ForEach(mirrored ? order.reversed() : order, id: \.self) { element in
-                view(for: element, tool: tool, window: window)
+                view(for: element, tool: tool, window: window, mirrored: mirrored)
             }
         }
     }
 
     @ViewBuilder
-    private func view(for element: Element, tool: Tool, window: LimitWindow?) -> some View {
+    private func view(for element: Element, tool: Tool, window: LimitWindow?, mirrored: Bool) -> some View {
         let content = ContentPreferences.shared.values
         let stale = usage.usage(for: tool)?.isStale ?? true
 
         switch element {
         case .label:
-            Text(content.hoverLabel == .full ? tool.displayName : tool.shortName)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(Color(nsColor: tool.accent))
-                .fixedSize()
+            switch content.hoverLabel {
+            case .logo:
+                AgentLogo(tool: tool, size: 11)
+            case .logoAndShort:
+                HStack(spacing: 3) {
+                    if mirrored { labelText(tool.shortName, tool: tool) }
+                    AgentLogo(tool: tool, size: 11)
+                    if !mirrored { labelText(tool.shortName, tool: tool) }
+                }
+            case .full:
+                labelText(tool.displayName, tool: tool)
+            case .short, .hidden:
+                labelText(tool.shortName, tool: tool)
+            }
         case .gauge:
             if let window {
                 GaugeBar(
@@ -100,6 +110,13 @@ struct CompactView: View {
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func labelText(_ text: String, tool: Tool) -> some View {
+        Text(text)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(Color(nsColor: tool.accent))
+            .fixedSize()
     }
 
     private func smallText(_ text: String) -> some View {

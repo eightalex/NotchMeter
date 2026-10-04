@@ -7,6 +7,13 @@ if CommandLine.arguments.contains("--dump") {
     exit(0)
 }
 
+/// `--stats [файл бази]` імпортує журнали агентів і друкує зведення.
+if let index = CommandLine.arguments.firstIndex(of: "--stats") {
+    let path = CommandLine.arguments.count > index + 1 ? CommandLine.arguments[index + 1] : nil
+    await Diagnostics.stats(databasePath: path)
+    exit(0)
+}
+
 if let index = CommandLine.arguments.firstIndex(of: "--snapshot") {
     let directory = CommandLine.arguments.count > index + 1
         ? URL(fileURLWithPath: CommandLine.arguments[index + 1])

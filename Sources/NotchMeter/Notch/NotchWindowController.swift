@@ -9,6 +9,7 @@ final class NotchWindowController: NSObject {
 
     /// Відкриває вікно налаштувань — його тримає делегат застосунку.
     var onOpenSettings: (() -> Void)?
+    var onOpenStats: (() -> Void)?
 
     private var panel: NotchPanel?
     private var hostingView: NSHostingView<NotchRootView>?
@@ -346,6 +347,10 @@ final class NotchWindowController: NSObject {
     func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
+        let stats = NSMenuItem(title: "Статистика…", action: #selector(openStats), keyEquivalent: "s")
+        stats.target = self
+        menu.addItem(stats)
+
         let settings = NSMenuItem(title: "Налаштування…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -357,6 +362,10 @@ final class NotchWindowController: NSObject {
 
     @objc private func openSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func openStats() {
+        onOpenStats?()
     }
 }
 

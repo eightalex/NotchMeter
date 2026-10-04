@@ -28,13 +28,15 @@ enum Style {
 
     /// Крило при наведенні — під той вміст, що увімкнено в налаштуваннях.
     /// Ширини елементів наближені, з невеликим запасом; з типовим набором
-    /// (мітка, шкала, відсоток, мітка вікна, крапка) виходить 120.
+    /// (логотип, шкала, відсоток, мітка вікна, крапка) виходить 117.
     @MainActor static func compactSideWidth(badgeLength: Int) -> CGFloat {
         let content = ContentPreferences.shared.values
         var items: [CGFloat] = []
         switch content.hoverLabel {
         case .short: items.append(14)
         case .full: items.append(38)
+        case .logo: items.append(11)
+        case .logoAndShort: items.append(28)
         case .hidden: break
         }
         if content.hoverShowsGauge { items.append(30) }

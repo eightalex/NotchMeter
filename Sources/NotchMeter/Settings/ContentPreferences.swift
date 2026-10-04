@@ -11,7 +11,7 @@ final class ContentPreferences {
     struct Values: Codable, Equatable {
         // MARK: При наведенні
 
-        var hoverLabel: AgentLabelStyle = .short
+        var hoverLabel: AgentLabelStyle = .logo
         var hoverShowsGauge = true
         var hoverShowsPercent = true
         var hoverPercentMode: PercentMode = .used
@@ -26,6 +26,7 @@ final class ContentPreferences {
         var panelShowsCodex = true
         var panelShowsClaude = true
         var panelShowsPlan = true
+        var panelShowsProviderLogo = true
         var panelShowsFiveHour = true
         var panelShowsWeek = true
         var panelShowsOpusWeek = true
@@ -43,6 +44,7 @@ final class ContentPreferences {
         var panelShowsSessions = true
         var panelIncludesIdleSessions = false
         var panelMaxSessions = 6
+        var panelSessionUsesLogo = true
         var panelSessionShowsTitle = true
         var panelSessionShowsDirectory = true
         var panelSessionShowsState = true
@@ -74,6 +76,7 @@ final class ContentPreferences {
             panelShowsCodex = read(.panelShowsCodex, base.panelShowsCodex)
             panelShowsClaude = read(.panelShowsClaude, base.panelShowsClaude)
             panelShowsPlan = read(.panelShowsPlan, base.panelShowsPlan)
+            panelShowsProviderLogo = read(.panelShowsProviderLogo, base.panelShowsProviderLogo)
             panelShowsFiveHour = read(.panelShowsFiveHour, base.panelShowsFiveHour)
             panelShowsWeek = read(.panelShowsWeek, base.panelShowsWeek)
             panelShowsOpusWeek = read(.panelShowsOpusWeek, base.panelShowsOpusWeek)
@@ -88,6 +91,7 @@ final class ContentPreferences {
             panelShowsSessions = read(.panelShowsSessions, base.panelShowsSessions)
             panelIncludesIdleSessions = read(.panelIncludesIdleSessions, base.panelIncludesIdleSessions)
             panelMaxSessions = read(.panelMaxSessions, base.panelMaxSessions)
+            panelSessionUsesLogo = read(.panelSessionUsesLogo, base.panelSessionUsesLogo)
             panelSessionShowsTitle = read(.panelSessionShowsTitle, base.panelSessionShowsTitle)
             panelSessionShowsDirectory = read(.panelSessionShowsDirectory, base.panelSessionShowsDirectory)
             panelSessionShowsState = read(.panelSessionShowsState, base.panelSessionShowsState)
@@ -133,6 +137,21 @@ final class ContentPreferences {
     private init() {
         values = UserDefaults.standard.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(Values.self, from: $0) } ?? .defaults
+        migrateToLogos()
+    }
+
+    /// Логотипи стали типовими вже після того, як налаштування встигли
+    /// зберегтися з літерами CX/CC. Перемикаємо один раз — і лише ті місця,
+    /// де лишалось старе типове значення, а не обране вручну.
+    private func migrateToLogos() {
+        let flag = "contentPreferencesLogosByDefault"
+        guard !UserDefaults.standard.bool(forKey: flag) else { return }
+        UserDefaults.standard.set(true, forKey: flag)
+        var migrated = values
+        if migrated.hoverLabel == .short { migrated.hoverLabel = .logo }
+        migrated.panelShowsProviderLogo = true
+        migrated.panelSessionUsesLogo = true
+        values = migrated
     }
 }
 
@@ -140,12 +159,16 @@ final class ContentPreferences {
 enum AgentLabelStyle: String, Codable, CaseIterable {
     case short
     case full
+    case logo
+    case logoAndShort
     case hidden
 
     var title: String {
         switch self {
         case .short: return "Коротко (CX, CC)"
         case .full: return "Повністю (Codex, Claude)"
+        case .logo: return "Логотип"
+        case .logoAndShort: return "Логотип і CX, CC"
         case .hidden: return "Без назви"
         }
     }

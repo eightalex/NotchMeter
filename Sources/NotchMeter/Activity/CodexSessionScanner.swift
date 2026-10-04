@@ -154,6 +154,34 @@ enum CodexStateDatabase {
         return result
     }
 
+    /// Назви всіх тредів, включно з архівними, — для журналу статистики.
+    static func allTitles(at databaseURL: URL = CodexPaths.stateDatabase) -> [String: String] {
+        guard FileManager.default.fileExists(atPath: databaseURL.path) else { return [:] }
+
+        var handle: OpaquePointer?
+        let uri = "file:\(databaseURL.path)?mode=ro"
+        guard sqlite3_open_v2(uri, &handle, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK,
+              let database = handle
+        else {
+            if handle != nil { sqlite3_close(handle) }
+            return [:]
+        }
+        defer { sqlite3_close(database) }
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, "SELECT id, title FROM threads", -1, &statement, nil) == SQLITE_OK,
+              let query = statement
+        else { return [:] }
+        defer { sqlite3_finalize(query) }
+
+        var result: [String: String] = [:]
+        while sqlite3_step(query) == SQLITE_ROW {
+            guard let id = column(query, 0), let title = column(query, 1), !title.isEmpty else { continue }
+            result[id] = title
+        }
+        return result
+    }
+
     private static func column(_ statement: OpaquePointer, _ index: Int32) -> String? {
         guard let text = sqlite3_column_text(statement, index) else { return nil }
         return String(cString: text)

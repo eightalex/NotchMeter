@@ -2,6 +2,37 @@ import Foundation
 
 /// Текстовий зріз стану — для перевірки, що джерела даних читаються правильно.
 enum Diagnostics {
+    static func stats(databasePath: String?) async {
+        let database = databasePath.map { StatsDatabase(url: URL(fileURLWithPath: $0)) } ?? StatsDatabase()
+        let importer = StatsImporter(database: database)
+        let started = Date()
+        let changed = await importer.importChanged(
+            options: StatsImporter.Options(storePrompts: true, keepSince: nil)
+        ) { _ in }
+        let imported = Date()
+        let snapshot = await importer.load()
+        print(String(format: "перечитано файлів: %d за %.1f с, читання бази %.2f с",
+                     changed, imported.timeIntervalSince(started), Date().timeIntervalSince(imported)))
+
+        for tool in Tool.allCases {
+            let turns = snapshot.turns.filter { $0.tool == tool }
+            let main = turns.filter { !$0.isSubagent }
+            let tokens = turns.reduce(TokenUsage()) { $0 + $1.tokens }
+            let time = main.reduce(0) { $0 + $1.duration }
+            print("\(tool.displayName): ходів \(main.count), субагентів \(turns.count - main.count), "
+                  + "сесій \(Set(turns.map(\.session)).count), час \(Int(time / 3600)) год, "
+                  + "токени in \(tokens.input) out \(tokens.output) cacheR \(tokens.cacheRead) cacheW \(tokens.cacheWrite)")
+            if let first = turns.first, let last = turns.last {
+                print("  з \(format(first.started)) по \(format(last.started))")
+            }
+            for turn in main.suffix(3) {
+                print("  · \(format(turn.started)) \(Int(turn.duration)) с \(turn.projectName) [\(turn.model ?? "?")] "
+                      + "\(turn.prompt.map { String($0.prefix(60)) } ?? "—")")
+            }
+        }
+        print("вимірів лімітів: \(snapshot.limits.count)")
+    }
+
     static func run() async {
         let providers: [any LimitProvider] = [CodexProvider(), ClaudeCodeProvider()]
 

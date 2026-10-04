@@ -28,6 +28,8 @@ struct ExpandedView: View {
                     ActivitySection(activity: activity, content: content)
                 }
 
+                TodayStatsLine()
+
                 if content.panelShowsUpdatedAt, let updated = usage.lastUpdated {
                     Text("оновлено \(Self.clock.string(from: updated))")
                         .font(.system(size: 9))
@@ -71,6 +73,39 @@ struct ExpandedView: View {
     }()
 }
 
+/// Підсумок дня зі статистики — якщо його ввімкнено в налаштуваннях.
+private struct TodayStatsLine: View {
+    var body: some View {
+        let preferences = StatsPreferences.shared.values
+        if preferences.panelShowsToday, preferences.recording,
+           preferences.panelTodayTurns || preferences.panelTodayTime || preferences.panelTodayTokens {
+            let analysis = StatsAnalysis(preferences: preferences)
+            let today = analysis.interval(for: .today, earliest: nil)
+            let turns = analysis.filter(StatsStore.shared.turns, in: today, tool: nil, project: nil)
+            let summary = analysis.summary(turns, metric: .turns)
+
+            HStack(spacing: 4) {
+                Text("Сьогодні")
+                    .font(.system(size: 10, weight: .semibold))
+                Text(parts(summary, preferences: preferences).joined(separator: " · "))
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private func parts(_ summary: StatsAnalysis.Summary, preferences: StatsPreferences.Values) -> [String] {
+        var parts: [String] = []
+        if preferences.panelTodayTurns { parts.append("ходів \(summary.turns)") }
+        if preferences.panelTodayTime { parts.append(StatsFormat.duration(summary.activeTime)) }
+        if preferences.panelTodayTokens {
+            parts.append("\(StatsFormat.number(Double(summary.countedTokens), style: .compact)) токенів")
+        }
+        return parts
+    }
+}
+
 private struct ProviderRow: View {
     let entry: ProviderUsage
     let content: ContentPreferences.Values
@@ -80,6 +115,9 @@ private struct ProviderRow: View {
 
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
+                if content.panelShowsProviderLogo {
+                    AgentLogo(tool: entry.tool, size: 13)
+                }
                 Text(entry.displayName)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(nsColor: entry.tool.accent))
@@ -234,9 +272,13 @@ private struct SessionRow: View {
                 )
                 .frame(width: 5, height: 5)
 
-            Text(session.tool.shortName)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(color)
+            if content.panelSessionUsesLogo {
+                AgentLogo(tool: session.tool, size: 10)
+            } else {
+                Text(session.tool.shortName)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(color)
+            }
 
             if content.panelSessionShowsTitle {
                 Text(session.title)

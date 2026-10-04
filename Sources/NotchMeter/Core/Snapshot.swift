@@ -29,6 +29,9 @@ enum Snapshot {
             ? Style.idleSideWidth(badgeLength: IdleView.badgeLength(in: activity))
             : 0
 
+        if ProcessInfo.processInfo.environment["NOTCHMETER_SNAPSHOT_STATS"] != nil {
+            await writeStats(to: directory)
+        }
         writeStatusIcon(to: directory.appendingPathComponent("statusicon.png"))
         writeSettings(usage: usage, activity: activity, to: directory.appendingPathComponent("settings.png"))
 
@@ -56,6 +59,39 @@ enum Snapshot {
                 to: directory.appendingPathComponent("\(name).png")
             )
         }
+
+        write(view: LogoSheet(), size: NSSize(width: 260, height: 110), backdrop: false,
+              to: directory.appendingPathComponent("logos.png"))
+
+        // `NOTCHMETER_SNAPSHOT_LOGOS=1` — ті самі стани з логотипами замість
+        // CX/CC. Налаштування підміняємо лише на час рендеру.
+        if ProcessInfo.processInfo.environment["NOTCHMETER_SNAPSHOT_LOGOS"] != nil {
+            let original = ContentPreferences.shared.values
+            defer { ContentPreferences.shared.values = original }
+            for (style, suffix) in [(AgentLabelStyle.logo, "logo"), (.logoAndShort, "logo-short")] {
+                ContentPreferences.shared.values.hoverLabel = style
+                ContentPreferences.shared.values.panelShowsProviderLogo = true
+                ContentPreferences.shared.values.panelSessionUsesLogo = true
+                let height = ExpandedView.measuredHeight(
+                    width: geometry.notchWidth + Style.expandedSideWidth * 2,
+                    geometry: geometry, usage: usage, activity: activity
+                )
+                for (state, name) in [(NotchState.compact, "compact"), (.expanded, "expanded")] {
+                    let metrics = NotchMetrics.make(
+                        for: state, geometry: geometry, idleSideWidth: idleSide,
+                        compactSideWidth: Style.compactSideWidth(badgeLength: IdleView.badgeLength(in: activity)),
+                        expandedHeight: height
+                    )
+                    let size = NSSize(width: metrics.windowSize.width + 24, height: metrics.windowSize.height + 12)
+                    write(
+                        view: NotchRootView(geometry: geometry, usage: usage, activity: activity,
+                                            state: state, metrics: metrics, animation: nil),
+                        size: size, backdrop: true,
+                        to: directory.appendingPathComponent("\(name)-\(suffix).png")
+                    )
+                }
+            }
+        }
     }
 
     /// Вкладки налаштувань — у справжньому вікні поза екраном: форма
@@ -67,12 +103,29 @@ enum Snapshot {
                   to: url.deletingLastPathComponent().appendingPathComponent("\(base)-general.png"))
         writeForm(AppearanceSettingsView(model: model, preferences: .shared, content: .shared),
                   to: url.deletingLastPathComponent().appendingPathComponent("\(base)-appearance.png"))
+        writeForm(StatsSettingsView(store: .shared, preferences: .shared) {},
+                  to: url.deletingLastPathComponent().appendingPathComponent("\(base)-stats.png"))
     }
 
-    private static func writeForm<V: View>(_ view: V, to url: URL) {
+    /// Вікно статистики з даними з бази. Довге — тож рендеримо на всю висоту
+    /// вмісту, без прокрутки: `NOTCHMETER_SNAPSHOT_STATS=1`.
+    private static func writeStats(to directory: URL) async {
+        let store = StatsStore.shared
+        store.start()
+        for _ in 0..<120 {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if !store.isImporting, store.lastImport != nil { break }
+        }
+        let view = StatsView(store: store, preferences: .shared, state: StatsViewState()) {}
+        writeForm(view, to: directory.appendingPathComponent("stats.png"),
+                  size: NSSize(width: 1040, height: 2600))
+    }
+
+    private static func writeForm<V: View>(_ view: V, to url: URL, size: NSSize? = nil) {
         let hosting = NSHostingController(rootView: view)
-        hosting.sizingOptions = [.preferredContentSize]
+        hosting.sizingOptions = size == nil ? [.preferredContentSize] : []
         let window = NSWindow(contentViewController: hosting)
+        if let size { window.setContentSize(size) }
         window.styleMask = [.titled, .closable]
         window.setFrameOrigin(NSPoint(x: -5000, y: -5000))
         window.orderFrontRegardless()
@@ -153,6 +206,21 @@ enum Snapshot {
     }
 }
 
+
+/// Логотипи агентів великими й у справжньому розмірі.
+private struct LogoSheet: View {
+    var body: some View {
+        HStack(spacing: 18) {
+            ForEach(Tool.allCases, id: \.self) { tool in
+                AgentLogo(tool: tool, size: 64)
+                AgentLogo(tool: tool, size: 11)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black)
+    }
+}
 
 /// Світла підкладка імітує світлий рядок меню — найважчий для контрасту випадок.
 private final class BackdropView: NSView {

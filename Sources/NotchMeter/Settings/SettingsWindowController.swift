@@ -7,6 +7,13 @@ import SwiftUI
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let model: SettingsModel
     private var window: NSWindow?
+    private var tabs: NSTabViewController?
+    /// Відкриває вікно статистики — кнопка на вкладці «Статистика».
+    var onOpenStats: (() -> Void)?
+
+    enum Tab: Int {
+        case general, appearance, stats
+    }
 
     init(usage: UsageStore, activity: ActivityStore, onPreview: @escaping (NotchState?) -> Void) {
         model = SettingsModel(usage: usage, activity: activity, onPreview: onPreview)
@@ -18,10 +25,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         model.preview = .off
     }
 
-    func show() {
+    func show(tab: Tab? = nil) {
         model.syncLoginStatus()
         let window = self.window ?? makeWindow()
         self.window = window
+        if let tab { tabs?.selectedTabViewItemIndex = tab.rawValue }
 
         // У застосунку немає іконки в Dock, тож без явної активації вікно
         // відкрилося б позаду поточного застосунку.
@@ -44,6 +52,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             symbol: "rectangle.topthird.inset.filled",
             view: AppearanceSettingsView(model: model, preferences: .shared, content: .shared)
         ))
+        tabs.addTabViewItem(tab(
+            title: "Статистика",
+            symbol: "chart.bar.xaxis",
+            view: StatsSettingsView(store: .shared, preferences: .shared) { [weak self] in self?.onOpenStats?() }
+        ))
+        self.tabs = tabs
 
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable]

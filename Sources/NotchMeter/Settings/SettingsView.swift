@@ -179,6 +179,7 @@ struct AppearanceSettingsView: View {
         Section {
             toggle(Tool.codex.displayName, \.panelShowsCodex)
             toggle(Tool.claude.displayName, \.panelShowsClaude)
+            toggle("Логотип біля назви агента", \.panelShowsProviderLogo)
             toggle("Назва плану (plus, pro…)", \.panelShowsPlan)
 
             toggle("Ліміт на 5 годин", \.panelShowsFiveHour)
@@ -234,6 +235,7 @@ struct AppearanceSettingsView: View {
                     }
                 }
 
+                toggle("Логотип замість CX, CC", \.panelSessionUsesLogo)
                 toggle("Назва сесії", \.panelSessionShowsTitle)
                 toggle("Тека проєкту", \.panelSessionShowsDirectory)
                 toggle("Стан (працює, чекає вводу)", \.panelSessionShowsState)
