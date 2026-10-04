@@ -26,32 +26,6 @@ enum Style {
         length > 0 ? CGFloat(length) * 5.5 + 1 : 0
     }
 
-    /// Крило при наведенні — під той вміст, що увімкнено в налаштуваннях.
-    /// Ширини елементів наближені, з невеликим запасом; з типовим набором
-    /// (логотип, шкала, відсоток, мітка вікна, крапка) виходить 117.
-    @MainActor static func compactSideWidth(badgeLength: Int) -> CGFloat {
-        let content = ContentPreferences.shared.values
-        var items: [CGFloat] = []
-        switch content.hoverLabel {
-        case .short: items.append(14)
-        case .full: items.append(38)
-        case .logo: items.append(11)
-        case .logoAndShort: items.append(28)
-        case .hidden: break
-        }
-        if content.hoverShowsGauge { items.append(30) }
-        if content.hoverShowsPercent { items.append(26) }
-        if content.hoverShowsWindowTag { items.append(12) }
-        if content.hoverShowsResetTime { items.append(30) }
-        if content.hoverShowsActivity {
-            items.append(PulsingDot.side + (content.hoverShowsBadge ? badgeWidth(length: badgeLength) : 0))
-        }
-        // Без жодного елемента лишається хоча б прочерк «—».
-        if items.isEmpty { items.append(10) }
-        let spacing = CGFloat(items.count - 1) * 5
-        return compactNotchGap + items.reduce(0, +) + spacing
-    }
-
     /// Проміжок між вмістом крила й вирізом.
     static let compactNotchGap: CGFloat = 10
 

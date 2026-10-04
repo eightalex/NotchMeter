@@ -40,7 +40,7 @@ enum Snapshot {
                 for: state,
                 geometry: geometry,
                 idleSideWidth: idleSide,
-                compactSideWidth: Style.compactSideWidth(badgeLength: IdleView.badgeLength(in: activity)),
+                compactSideWidth: CompactView.sideWidth(usage: usage, activity: activity),
                 expandedHeight: expandedHeight
             )
             // Трохи світлого поля довкола, щоб було видно вушка й тінь.
@@ -79,7 +79,7 @@ enum Snapshot {
                 for (state, name) in [(NotchState.compact, "compact"), (.expanded, "expanded")] {
                     let metrics = NotchMetrics.make(
                         for: state, geometry: geometry, idleSideWidth: idleSide,
-                        compactSideWidth: Style.compactSideWidth(badgeLength: IdleView.badgeLength(in: activity)),
+                        compactSideWidth: CompactView.sideWidth(usage: usage, activity: activity),
                         expandedHeight: height
                     )
                     let size = NSSize(width: metrics.windowSize.width + 24, height: metrics.windowSize.height + 12)

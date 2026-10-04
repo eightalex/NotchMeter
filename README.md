@@ -46,10 +46,10 @@
 Потрібні лише Command Line Tools (Xcode не потрібен).
 
 ```bash
-make run       # зібрати build/NotchMeter.app і запустити
-make install   # скопіювати в /Applications
+make run       # зібрати /Applications/NotchMeter.app і запустити
+make app       # лише зібрати (застосунок одразу складається в /Applications)
 make dump      # вивести ліміти й сесії в термінал без UI
-build/NotchMeter.app/Contents/MacOS/NotchMeter --stats /tmp/stats.sqlite  # імпорт журналів у тестову базу і зведення
+/Applications/NotchMeter.app/Contents/MacOS/NotchMeter --stats /tmp/stats.sqlite  # імпорт журналів у тестову базу і зведення
 make icon      # перемалювати Resources/AppIcon.icns
 ```
 

@@ -143,7 +143,7 @@ final class NotchWindowController: NSObject {
             for: state,
             geometry: geometry,
             idleSideWidth: idleSideWidth,
-            compactSideWidth: Style.compactSideWidth(badgeLength: IdleView.badgeLength(in: activity)),
+            compactSideWidth: CompactView.sideWidth(usage: usage, activity: activity),
             expandedHeight: expandedHeight
         )
     }

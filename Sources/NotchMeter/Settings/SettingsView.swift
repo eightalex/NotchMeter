@@ -165,10 +165,23 @@ struct AppearanceSettingsView: View {
             toggle("Крапка активності", \.hoverShowsActivity)
             toggle("Лічильник сесій біля крапки", \.hoverShowsBadge)
                 .disabled(!values.hoverShowsActivity)
+            LabeledContent("Відступ від краю крила") {
+                HStack(spacing: 10) {
+                    Slider(value: Binding(
+                        get: { values.hoverEdgePadding },
+                        set: { content.values.hoverEdgePadding = $0.rounded() }
+                    ), in: 4...24)
+                    .frame(width: 180)
+                    Text("\(Int(values.hoverEdgePadding))")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, alignment: .trailing)
+                }
+            }
         } header: {
             Text("При наведенні на виріз")
         } footer: {
-            Text("Щоб бачити зміни одразу, оберіть угорі «Стан наведення». Ширина крил підлаштовується під увімкнений вміст.")
+            Text("Щоб бачити зміни одразу, оберіть угорі «Стан наведення». Ширина крил підлаштовується під вміст ширшого з них, а відступи від краю крила й від вирізу лишаються сталими; у вужчому крилі логотип стоїть біля краю, решта — біля вирізу.")
                 .foregroundStyle(.secondary)
         }
     }

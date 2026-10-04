@@ -20,6 +20,8 @@ final class ContentPreferences {
         var hoverGaugeColoring: GaugeColoring = .thresholds
         var hoverShowsActivity = true
         var hoverShowsBadge = true
+        /// Відступ вмісту від зовнішнього краю крила, pt.
+        var hoverEdgePadding: Double = 10
 
         // MARK: Панель — ліміти
 
@@ -73,6 +75,7 @@ final class ContentPreferences {
             hoverGaugeColoring = read(.hoverGaugeColoring, base.hoverGaugeColoring)
             hoverShowsActivity = read(.hoverShowsActivity, base.hoverShowsActivity)
             hoverShowsBadge = read(.hoverShowsBadge, base.hoverShowsBadge)
+            hoverEdgePadding = read(.hoverEdgePadding, base.hoverEdgePadding)
             panelShowsCodex = read(.panelShowsCodex, base.panelShowsCodex)
             panelShowsClaude = read(.panelShowsClaude, base.panelShowsClaude)
             panelShowsPlan = read(.panelShowsPlan, base.panelShowsPlan)

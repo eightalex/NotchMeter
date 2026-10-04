@@ -1,11 +1,13 @@
 #!/bin/bash
 # Збирає NotchMeter.app без Xcode: SwiftPM дає виконуваний файл, решту
-# бандла складаємо вручну.
+# бандла складаємо вручну. Застосунок складається одразу в /Applications:
+# друга копія десь у теці проєкту плутала б Spotlight, Launchpad і
+# автозапуск. Інше місце можна задати змінною APP.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="${CONFIG:-release}"
-APP="$ROOT/build/NotchMeter.app"
+APP="${APP:-/Applications/NotchMeter.app}"
 BUNDLE_ID="com.alexanderkuzmenko.notchmeter"
 
 cd "$ROOT"
