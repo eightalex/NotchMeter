@@ -154,6 +154,20 @@ struct AppearanceSettingsView: View {
             }
 
             picker("Назва агента", \.hoverLabel, options: AgentLabelStyle.allCases) { $0.title }
+            LabeledContent("Логотип Codex") {
+                HStack(spacing: 10) {
+                    CodexLogoPreview(style: values.codexLogo)
+                    Picker("Логотип Codex", selection: Binding(
+                        get: { values.codexLogo },
+                        set: { content.values.codexLogo = $0 }
+                    )) {
+                        ForEach(CodexLogoStyle.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            }
             toggle("Шкала ліміту", \.hoverShowsGauge)
             picker("Колір шкали", \.hoverGaugeColoring, options: GaugeColoring.allCases) { $0.title }
                 .disabled(!values.hoverShowsGauge)
@@ -363,5 +377,15 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(Style.warningColor)
             }
         }
+    }
+}
+
+/// Знак Codex у потрібному стилі — для перемикача в налаштуваннях, незалежно
+/// від того, що зараз обрано.
+private struct CodexLogoPreview: View {
+    let style: CodexLogoStyle
+
+    var body: some View {
+        AgentLogo(tool: .codex, size: 13, styleOverride: style)
     }
 }

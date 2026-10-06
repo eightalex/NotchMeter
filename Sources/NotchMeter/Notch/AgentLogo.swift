@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Знак агента, намальований векторно: у Claude — промениста «зірочка», у
-/// Codex — хмаринка з підказкою терміналу `>_`. Власні контури замість
+/// Codex — хмаринка з підказкою терміналу `>_` або, на вибір, «квітка»
+/// ChatGPT. Власні контури замість
 /// картинок із застосунків агентів: однаково чіткі на будь-якому розмірі й
 /// не залежать від того, що встановлено на Mac.
 struct AgentLogo: View {
@@ -9,6 +10,8 @@ struct AgentLogo: View {
     var size: CGFloat = 11
     /// Колір знака; типово — фірмовий колір агента.
     var color: Color?
+    /// Стиль знака Codex замість обраного в налаштуваннях — для прев'ю.
+    var styleOverride: CodexLogoStyle?
 
     var body: some View {
         let fill = color ?? Color(nsColor: tool.accent)
@@ -16,6 +19,9 @@ struct AgentLogo: View {
             switch tool {
             case .claude:
                 ClaudeSpark().fill(fill)
+            case .codex where (styleOverride ?? ContentPreferences.shared.values.codexLogo) == .chatgpt:
+                ChatGPTBlossom()
+                    .stroke(fill, style: StrokeStyle(lineWidth: size * 0.085, lineCap: .round, lineJoin: .round))
             case .codex:
                 ZStack {
                     CodexCloud().fill(fill)
@@ -65,6 +71,32 @@ private struct ClaudeSpark: Shape {
         // Серцевина, щоб основи променів зливалися в одне ціле.
         path.addEllipse(in: CGRect(x: center.x - baseHalfWidth * 1.4, y: center.y - baseHalfWidth * 1.4,
                                    width: baseHalfWidth * 2.8, height: baseHalfWidth * 2.8))
+        return path
+    }
+}
+
+/// «Квітка» ChatGPT: шість капсул, повернутих через 60° навколо
+/// центру, — їхні контури переплітаються в шестикутний вузол.
+private struct ChatGPTBlossom: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        // Запас під товщину лінії, щоб контур не обрізався краєм кадру.
+        let radius = min(rect.width, rect.height) / 2 * 0.9
+        let width = radius * 0.58
+        let height = radius * 1.15
+        // Капсули зсунуті вбік від променя — так виходить «вертушка» з
+        // шестикутним отвором у центрі, а не просто квітка з кілець.
+        let radial = radius * 0.4
+        let tangential = radius * 0.21
+
+        var path = Path()
+        for index in 0..<6 {
+            let angle = CGFloat(index) * .pi / 3
+            let petal = CGRect(x: tangential - width / 2, y: -radial - height / 2 + radius * 0.05,
+                               width: width, height: height)
+            let transform = CGAffineTransform(translationX: center.x, y: center.y).rotated(by: angle)
+            path.addPath(Path(roundedRect: petal, cornerRadius: width / 2), transform: transform)
+        }
         return path
     }
 }

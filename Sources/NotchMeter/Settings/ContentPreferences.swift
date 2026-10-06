@@ -12,6 +12,7 @@ final class ContentPreferences {
         // MARK: При наведенні
 
         var hoverLabel: AgentLabelStyle = .logo
+        var codexLogo: CodexLogoStyle = .codex
         var hoverShowsGauge = true
         var hoverShowsPercent = true
         var hoverPercentMode: PercentMode = .used
@@ -67,6 +68,7 @@ final class ContentPreferences {
                 (try? container.decodeIfPresent(T.self, forKey: key)) ?? fallback
             }
             hoverLabel = read(.hoverLabel, base.hoverLabel)
+            codexLogo = read(.codexLogo, base.codexLogo)
             hoverShowsGauge = read(.hoverShowsGauge, base.hoverShowsGauge)
             hoverShowsPercent = read(.hoverShowsPercent, base.hoverShowsPercent)
             hoverPercentMode = read(.hoverPercentMode, base.hoverPercentMode)
@@ -173,6 +175,19 @@ enum AgentLabelStyle: String, Codable, CaseIterable {
         case .logo: return "Логотип"
         case .logoAndShort: return "Логотип і CX, CC"
         case .hidden: return "Без назви"
+        }
+    }
+}
+
+/// Яким знаком позначати Codex: власним (хмаринка з `>_`) чи ChatGPT.
+enum CodexLogoStyle: String, Codable, CaseIterable {
+    case codex
+    case chatgpt
+
+    var title: String {
+        switch self {
+        case .codex: return "Codex"
+        case .chatgpt: return "ChatGPT"
         }
     }
 }

@@ -60,7 +60,7 @@ enum Snapshot {
             )
         }
 
-        write(view: LogoSheet(), size: NSSize(width: 260, height: 110), backdrop: false,
+        write(view: LogoSheet(), size: NSSize(width: 360, height: 110), backdrop: false,
               to: directory.appendingPathComponent("logos.png"))
 
         // `NOTCHMETER_SNAPSHOT_LOGOS=1` — ті самі стани з логотипами замість
@@ -215,6 +215,8 @@ private struct LogoSheet: View {
                 AgentLogo(tool: tool, size: 64)
                 AgentLogo(tool: tool, size: 11)
             }
+            AgentLogo(tool: .codex, size: 64, styleOverride: .chatgpt)
+            AgentLogo(tool: .codex, size: 11, styleOverride: .chatgpt)
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
